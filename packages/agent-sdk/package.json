@@ -1,0 +1,45 @@
+{
+  "name": "@xidr/agent-sdk",
+  "version": "0.1.0",
+  "description": "SDK for tenant agents to integrate with Xid-R GPU broker",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "xidr",
+    "gpu",
+    "ai-agents",
+    "a2a",
+    "mcp",
+    "checkpoint"
+  ],
+  "author": "Xid-R Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@google-cloud/storage": "^7.7.0",
+    "hono": "^4.0.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.0"
+  },
+  "peerDependencies": {
+    "hono": "^4.0.0"
+  }
+}
