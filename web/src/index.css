@@ -1,0 +1,385 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* Geist Font - loaded from CDN */
+@font-face {
+  font-family: 'Geist';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/Geist-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/Geist-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/Geist-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-sans/Geist-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-mono/GeistMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('https://cdn.jsdelivr.net/npm/geist@1.0.0/dist/fonts/geist-mono/GeistMono-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Landing page keeps dark theme */
+  :root {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 199 89% 48%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 199 89% 48%;
+    --radius: 0.5rem;
+
+    /* Chart colors */
+    --chart-1: 199 89% 48%;
+    --chart-2: 262 83% 58%;
+    --chart-3: 142 71% 45%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 0 84% 60%;
+
+    /* Custom vars for landing */
+    --bg-0: #09090b;
+    --bg-100: #18181b;
+    --bg-200: #27272a;
+    --bg-300: #3f3f46;
+    --text-100: #fafafa;
+    --text-200: #e4e4e7;
+    --text-300: #a1a1aa;
+    --text-400: #71717a;
+  }
+
+  /* Dashboard uses the new clean light design */
+  .dashboard-theme {
+    --card: 0 0% 100%;
+    --ring: 0 0% 0%;
+    --input: 0 0% 94%;
+    --muted: 0 0% 97%;
+    --accent: 0 0% 94%;
+    --border: 0 0% 90%;
+    --popover: 0 0% 99%;
+    --primary: 0 0% 0%;
+    --sidebar: 0 0% 99%;
+    --secondary: 0 0% 94%;
+    --background: 0 0% 99%;
+    --foreground: 0 0% 0%;
+    --destructive: 0 84% 60%;
+    --card-foreground: 0 0% 0%;
+    --muted-foreground: 0 0% 45%;
+    --accent-foreground: 0 0% 0%;
+    --popover-foreground: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --secondary-foreground: 0 0% 0%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Sidebar specific */
+    --sidebar-ring: 0 0% 0%;
+    --sidebar-accent: 0 0% 94%;
+    --sidebar-border: 0 0% 94%;
+    --sidebar-primary: 0 0% 0%;
+    --sidebar-foreground: 0 0% 0%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-primary-foreground: 0 0% 100%;
+
+    /* Shadow */
+    --shadow-color: 0 0% 0%;
+    --shadow-opacity: 0.08;
+  }
+
+  .dashboard-theme.dark {
+    --card: 0 0% 8%;
+    --ring: 0 0% 72%;
+    --input: 0 0% 20%;
+    --muted: 0 0% 14%;
+    --accent: 0 0% 20%;
+    --border: 0 0% 18%;
+    --popover: 0 0% 10%;
+    --primary: 0 0% 100%;
+    --sidebar: 0 0% 10%;
+    --secondary: 0 0% 16%;
+    --background: 0 0% 4%;
+    --foreground: 0 0% 100%;
+    --destructive: 0 72% 51%;
+    --card-foreground: 0 0% 100%;
+    --muted-foreground: 0 0% 63%;
+    --accent-foreground: 0 0% 100%;
+    --popover-foreground: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+    --secondary-foreground: 0 0% 100%;
+    --destructive-foreground: 0 0% 0%;
+
+    --sidebar-ring: 0 0% 72%;
+    --sidebar-accent: 0 0% 20%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 0%;
+
+    --shadow-opacity: 0.25;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', 'Geist', system-ui, sans-serif;
+  }
+
+  .dashboard-theme {
+    font-family: 'Geist', system-ui, sans-serif;
+  }
+
+  .font-mono {
+    font-family: 'Geist Mono', 'JetBrains Mono', monospace;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 bg-clip-text text-transparent;
+  }
+
+  .glow {
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+  }
+
+  .glow-lg {
+    box-shadow: 0 0 40px rgba(56, 189, 248, 0.4);
+  }
+
+  .glass {
+    @apply bg-white/5 backdrop-blur-md border border-white/10;
+  }
+
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl;
+  }
+
+  /* Dashboard specific utilities */
+  .dashboard-card {
+    @apply bg-card border border-border rounded-xl shadow-sm;
+  }
+
+  .dashboard-card-hover {
+    @apply dashboard-card transition-all hover:shadow-md hover:border-border/80;
+  }
+
+  .stat-value {
+    @apply text-3xl font-semibold tracking-tight text-foreground;
+  }
+
+  .stat-label {
+    @apply text-sm text-muted-foreground;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-foreground;
+  }
+
+  .subtle-border {
+    @apply border border-border/50;
+  }
+}
+
+/* Dashboard scrollbar - light theme */
+.dashboard-theme::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dashboard-theme::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+}
+
+.dashboard-theme::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 4px;
+}
+
+.dashboard-theme::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Landing page scrollbar - dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-100);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-300);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-400);
+}
+
+/* Custom animations */
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gradient-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 3s ease infinite;
+}
+
+/* GPU Card glow effect - landing page */
+.gpu-card {
+  position: relative;
+}
+
+.gpu-card::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(168, 85, 247, 0.2));
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.gpu-card:hover::before {
+  opacity: 1;
+}
+
+/* Status indicators */
+.status-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.status-dot-active {
+  @apply bg-emerald-500;
+}
+
+.status-dot-pending {
+  @apply bg-amber-500;
+}
+
+.status-dot-error {
+  @apply bg-red-500;
+}
+
+/* Dashboard table styles */
+.dashboard-table {
+  @apply w-full text-sm;
+}
+
+.dashboard-table th {
+  @apply text-left font-medium text-muted-foreground py-3 px-4 border-b border-border;
+}
+
+.dashboard-table td {
+  @apply py-3 px-4 border-b border-border/50;
+}
+
+.dashboard-table tr:hover td {
+  @apply bg-muted/50;
+}
+
+/* Badge variants for dashboard */
+.badge-success {
+  @apply bg-emerald-50 text-emerald-700 border-emerald-200;
+}
+
+.badge-warning {
+  @apply bg-amber-50 text-amber-700 border-amber-200;
+}
+
+.badge-error {
+  @apply bg-red-50 text-red-700 border-red-200;
+}
+
+.badge-info {
+  @apply bg-blue-50 text-blue-700 border-blue-200;
+}
+
+.badge-neutral {
+  @apply bg-gray-100 text-gray-700 border-gray-200;
+}
+
+/* Dark mode badge variants */
+.dashboard-theme.dark .badge-success {
+  @apply bg-emerald-950 text-emerald-400 border-emerald-800;
+}
+
+.dashboard-theme.dark .badge-warning {
+  @apply bg-amber-950 text-amber-400 border-amber-800;
+}
+
+.dashboard-theme.dark .badge-error {
+  @apply bg-red-950 text-red-400 border-red-800;
+}
+
+.dashboard-theme.dark .badge-info {
+  @apply bg-blue-950 text-blue-400 border-blue-800;
+}
+
+.dashboard-theme.dark .badge-neutral {
+  @apply bg-gray-800 text-gray-300 border-gray-700;
+}
