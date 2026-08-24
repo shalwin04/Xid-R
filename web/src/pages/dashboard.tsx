@@ -15,6 +15,12 @@ import {
   CheckCircle,
   TrendingUp,
   MoreHorizontal,
+  Cpu,
+  Users,
+  BarChart3,
+  HardDrive,
+  Timer,
+  Database,
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/layout';
 import { useDashboard } from '@/hooks';
@@ -34,6 +40,43 @@ const statusStyles: Record<string, { bg: string; text: string; dot: string }> = 
   negotiating: { bg: 'bg-orange-50 dark:bg-orange-950', text: 'text-orange-700 dark:text-orange-400', dot: 'bg-orange-500' },
   checkpointing: { bg: 'bg-blue-50 dark:bg-blue-950', text: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500' },
 };
+
+const nodeStatusStyles: Record<string, { bg: string; text: string }> = {
+  healthy: { bg: 'bg-emerald-50 dark:bg-emerald-950', text: 'text-emerald-700 dark:text-emerald-400' },
+  degraded: { bg: 'bg-amber-50 dark:bg-amber-950', text: 'text-amber-700 dark:text-amber-400' },
+  offline: { bg: 'bg-red-50 dark:bg-red-950', text: 'text-red-700 dark:text-red-400' },
+};
+
+const checkpointStatusStyles: Record<string, { bg: string; text: string }> = {
+  complete: { bg: 'bg-emerald-50 dark:bg-emerald-950', text: 'text-emerald-700 dark:text-emerald-400' },
+  restored: { bg: 'bg-blue-50 dark:bg-blue-950', text: 'text-blue-700 dark:text-blue-400' },
+  writing: { bg: 'bg-amber-50 dark:bg-amber-950', text: 'text-amber-700 dark:text-amber-400' },
+  expired: { bg: 'bg-gray-50 dark:bg-gray-900', text: 'text-gray-700 dark:text-gray-400' },
+  failed: { bg: 'bg-red-50 dark:bg-red-950', text: 'text-red-700 dark:text-red-400' },
+};
+
+function getUtilizationColor(percent: number): string {
+  if (percent < 30) return 'text-emerald-600 dark:text-emerald-400';
+  if (percent < 70) return 'text-amber-600 dark:text-amber-400';
+  return 'text-red-600 dark:text-red-400';
+}
+
+function getUtilizationBg(percent: number): string {
+  if (percent < 30) return 'bg-emerald-500';
+  if (percent < 70) return 'bg-amber-500';
+  return 'bg-red-500';
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return ms + 'ms';
+  return (ms / 1000).toFixed(2) + 's';
+}
 
 export function DashboardPage() {
   const { state, connected, loading, error, refresh } = useDashboard();
@@ -391,6 +434,321 @@ export function DashboardPage() {
                 </div>
               </Link>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* GPU Utilization Section */}
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <Cpu className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            GPU Utilization
+          </h2>
+          <span className="text-sm text-muted-foreground">
+            {state.gpuUtilization.length} GPUs
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {state.gpuUtilization.length === 0 ? (
+            <div className="col-span-full p-8 rounded-xl border border-border bg-card text-center">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+                <Cpu className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <p className="text-sm text-muted-foreground">No GPUs discovered</p>
+            </div>
+          ) : (
+            state.gpuUtilization.map((gpu) => (
+              <div key={gpu.id} className="p-4 rounded-xl border border-border bg-card">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="font-medium text-foreground text-sm truncate max-w-[140px]">
+                      {gpu.instanceName || gpu.id}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {gpu.gpuType} • {gpu.memoryGb}GB
+                    </div>
+                  </div>
+                  <div className={cn("text-2xl font-bold", getUtilizationColor(gpu.utilizationPercent))}>
+                    {gpu.utilizationPercent.toFixed(0)}%
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <span className={cn(
+                    "px-2 py-0.5 rounded font-medium",
+                    statusStyles[gpu.status]?.bg || 'bg-gray-50 dark:bg-gray-900',
+                    statusStyles[gpu.status]?.text || 'text-gray-700 dark:text-gray-400'
+                  )}>
+                    {gpu.status}
+                  </span>
+                  <span className="text-muted-foreground">GPU #{gpu.gpuIndex}</span>
+                </div>
+                <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={cn("h-full rounded-full transition-all", getUtilizationBg(gpu.utilizationPercent))}
+                    style={{ width: `${gpu.utilizationPercent}%` }}
+                  />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* GKE Node Status Section */}
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+            <HardDrive className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+            GKE Node Status
+          </h2>
+          <span className="text-sm text-muted-foreground">
+            {state.gkeNodes.length} Nodes
+          </span>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {state.gkeNodes.length === 0 ? (
+            <div className="col-span-full p-8 rounded-xl border border-border bg-card text-center">
+              <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+                <HardDrive className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <p className="text-sm text-muted-foreground">No GKE nodes discovered</p>
+              <p className="text-xs text-muted-foreground mt-1">Set USE_REAL_GKE=true to enable</p>
+            </div>
+          ) : (
+            state.gkeNodes.map((node) => {
+              const style = nodeStatusStyles[node.status] || nodeStatusStyles.healthy;
+              return (
+                <div key={node.nodeName} className="p-4 rounded-xl border border-border bg-card">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <div className="font-medium text-foreground">{node.nodeName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {node.nodePool || 'default'} • {node.zone} • {node.gpuType}
+                      </div>
+                    </div>
+                    <span className={cn("px-2 py-1 rounded text-xs font-medium", style.bg, style.text)}>
+                      {node.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {node.gpus.map((gpu) => (
+                      <div
+                        key={gpu.gpuIndex}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted text-xs"
+                      >
+                        <div className={cn(
+                          "w-2 h-2 rounded-full",
+                          gpu.status === 'available' ? 'bg-emerald-500' :
+                          gpu.status === 'leased' ? 'bg-blue-500' :
+                          gpu.status === 'draining' ? 'bg-amber-500' : 'bg-gray-500'
+                        )} />
+                        <span className="text-foreground">GPU #{gpu.gpuIndex}:</span>
+                        <span className={getUtilizationColor(gpu.utilizationPercent)}>
+                          {gpu.utilizationPercent.toFixed(0)}%
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{node.gpuCount} GPUs total</span>
+                    <span>Avg: {node.totalUtilization}%</span>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* Analytics Row: Cost Analytics, Tenant Breakdown, Checkpoint Stats */}
+      <div className="grid lg:grid-cols-3 gap-6 mt-6">
+        {/* Cost Analytics */}
+        <div className="rounded-xl border border-border bg-card">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+            <h2 className="font-semibold text-foreground flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              Cost Analytics
+            </h2>
+            <span className={cn(
+              "px-2 py-0.5 rounded text-xs font-medium",
+              state.costAnalytics.savingsPercent > 0
+                ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400"
+                : "bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-400"
+            )}>
+              {state.costAnalytics.savingsPercent.toFixed(1)}% saved
+            </span>
+          </div>
+          <div className="p-5">
+            {/* Daily Savings Chart */}
+            <div className="h-24 flex items-end gap-1 mb-4">
+              {state.costAnalytics.daily.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+                  No data yet
+                </div>
+              ) : (
+                state.costAnalytics.daily.map((day, i) => {
+                  const maxSavings = Math.max(...state.costAnalytics.daily.map(d => d.savingsUsd), 0.01);
+                  const height = Math.max((day.savingsUsd / maxSavings) * 100, 5);
+                  return (
+                    <div
+                      key={i}
+                      className="flex-1 bg-emerald-500 rounded-t hover:bg-emerald-400 transition-colors cursor-pointer group relative"
+                      style={{ height: `${height}%` }}
+                      title={`${day.date}: $${day.savingsUsd.toFixed(4)} (${day.leaseCount} leases)`}
+                    >
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-foreground text-background text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                        ${day.savingsUsd.toFixed(4)}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            {/* Cost Summary */}
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Baseline Cost</span>
+                <span className="font-medium text-foreground">${state.costAnalytics.totalBaselineCostUsd.toFixed(4)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Actual Cost</span>
+                <span className="font-medium text-foreground">${state.costAnalytics.totalActualCostUsd.toFixed(4)}</span>
+              </div>
+              <div className="flex justify-between pt-2 border-t border-border">
+                <span className="text-muted-foreground font-medium">Total Saved</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                  ${state.costAnalytics.totalSavingsUsd.toFixed(4)}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Tenant Breakdown */}
+        <div className="rounded-xl border border-border bg-card">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+            <h2 className="font-semibold text-foreground flex items-center gap-2">
+              <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              Tenant Breakdown
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              {state.tenantBreakdown.length} tenants
+            </span>
+          </div>
+          <div className="p-5">
+            {state.tenantBreakdown.length === 0 ? (
+              <div className="py-8 text-center">
+                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+                  <Users className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">No tenant data</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {state.tenantBreakdown.slice(0, 5).map((tenant) => (
+                  <div
+                    key={tenant.tenantId}
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                  >
+                    <div>
+                      <div className="font-medium text-foreground text-sm">{tenant.tenantName}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {tenant.activeLeases} active / {tenant.totalLeases} total
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                        ${tenant.totalSavingsUsd.toFixed(4)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">saved</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Checkpoint Analytics */}
+        <div className="rounded-xl border border-border bg-card">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+            <h2 className="font-semibold text-foreground flex items-center gap-2">
+              <Database className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              Checkpoint Stats
+            </h2>
+            <span className={cn(
+              "px-2 py-0.5 rounded text-xs font-medium",
+              state.checkpointAnalytics.successRate >= 90
+                ? "bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400"
+                : state.checkpointAnalytics.successRate >= 70
+                ? "bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400"
+                : "bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400"
+            )}>
+              {state.checkpointAnalytics.successRate.toFixed(1)}% success
+            </span>
+          </div>
+          <div className="p-5">
+            {/* Stats Grid */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950 text-center">
+                <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400">
+                  {state.checkpointAnalytics.complete + state.checkpointAnalytics.restored}
+                </div>
+                <div className="text-xs text-emerald-600 dark:text-emerald-500">Successful</div>
+              </div>
+              <div className="p-3 rounded-lg bg-red-50 dark:bg-red-950 text-center">
+                <div className="text-xl font-bold text-red-700 dark:text-red-400">
+                  {state.checkpointAnalytics.failed}
+                </div>
+                <div className="text-xs text-red-600 dark:text-red-500">Failed</div>
+              </div>
+            </div>
+            {/* Avg Stats */}
+            <div className="flex items-center justify-between text-sm mb-4 p-3 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2">
+                <Timer className="w-4 h-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Avg Duration</span>
+              </div>
+              <span className="font-medium text-foreground">
+                {formatDuration(state.checkpointAnalytics.avgDurationMs)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-sm p-3 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2">
+                <HardDrive className="w-4 h-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Avg Size</span>
+              </div>
+              <span className="font-medium text-foreground">
+                {formatBytes(state.checkpointAnalytics.avgSizeBytes)}
+              </span>
+            </div>
+            {/* Recent Checkpoints */}
+            {state.checkpointAnalytics.recentCheckpoints.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <div className="text-xs font-medium text-muted-foreground mb-2">Recent</div>
+                <div className="space-y-2">
+                  {state.checkpointAnalytics.recentCheckpoints.slice(0, 3).map((ckpt) => {
+                    const style = checkpointStatusStyles[ckpt.status] || checkpointStatusStyles.complete;
+                    return (
+                      <div key={ckpt.id} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className={cn("px-1.5 py-0.5 rounded", style.bg, style.text)}>
+                            {ckpt.status}
+                          </span>
+                          <span className="font-mono text-muted-foreground truncate max-w-[80px]">
+                            {ckpt.leaseId}
+                          </span>
+                        </div>
+                        <span className="text-muted-foreground">
+                          {formatBytes(ckpt.sizeBytes)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

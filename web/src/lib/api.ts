@@ -95,6 +95,67 @@ export interface ExplainResponse {
   decision_factors: string[];
 }
 
+export interface GpuUtilizationData {
+  id: string;
+  instanceName: string | null;
+  gpuType: string;
+  gpuIndex: number;
+  status: string;
+  utilizationPercent: number;
+  memoryGb: number;
+  currentLeaseId: string | null;
+}
+
+export interface TenantBreakdownData {
+  tenantId: string;
+  tenantName: string;
+  activeLeases: number;
+  totalLeases: number;
+  totalSavingsUsd: number;
+}
+
+export interface CostAnalyticsData {
+  hourly: Array<{ hour: string; savingsUsd: number; leaseCount: number }>;
+  daily: Array<{ date: string; savingsUsd: number; leaseCount: number }>;
+  totalBaselineCostUsd: number;
+  totalActualCostUsd: number;
+  totalSavingsUsd: number;
+  savingsPercent: number;
+}
+
+export interface CheckpointAnalyticsData {
+  total: number;
+  complete: number;
+  restored: number;
+  failed: number;
+  successRate: number;
+  avgSizeBytes: number;
+  avgDurationMs: number;
+  recentCheckpoints: Array<{
+    id: string;
+    leaseId: string;
+    status: string;
+    sizeBytes: number;
+    durationMs: number;
+    createdAt: string;
+  }>;
+}
+
+export interface GkeNodeData {
+  nodeName: string;
+  nodePool: string | null;
+  zone: string;
+  gpuCount: number;
+  gpuType: string;
+  status: 'healthy' | 'degraded' | 'offline';
+  totalUtilization: number;
+  gpus: Array<{
+    gpuIndex: number;
+    status: string;
+    utilizationPercent: number;
+  }>;
+}
+
 export interface DashboardData {
   stats: {
     active_leases: number;
@@ -113,6 +174,11 @@ export interface DashboardData {
     timestamp: string;
     summary: string;
   }>;
+  gpuUtilization?: GpuUtilizationData[];
+  tenantBreakdown?: TenantBreakdownData[];
+  costAnalytics?: CostAnalyticsData;
+  checkpointAnalytics?: CheckpointAnalyticsData;
+  gkeNodes?: GkeNodeData[];
   updated_at: string;
 }
 

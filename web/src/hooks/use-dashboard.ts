@@ -1,6 +1,67 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '@/lib/api';
 
+export interface GpuUtilization {
+  id: string;
+  instanceName: string | null;
+  gpuType: string;
+  gpuIndex: number;
+  status: string;
+  utilizationPercent: number;
+  memoryGb: number;
+  currentLeaseId: string | null;
+}
+
+export interface TenantBreakdown {
+  tenantId: string;
+  tenantName: string;
+  activeLeases: number;
+  totalLeases: number;
+  totalSavingsUsd: number;
+}
+
+export interface CostAnalytics {
+  hourly: Array<{ hour: string; savingsUsd: number; leaseCount: number }>;
+  daily: Array<{ date: string; savingsUsd: number; leaseCount: number }>;
+  totalBaselineCostUsd: number;
+  totalActualCostUsd: number;
+  totalSavingsUsd: number;
+  savingsPercent: number;
+}
+
+export interface CheckpointAnalytics {
+  total: number;
+  complete: number;
+  restored: number;
+  failed: number;
+  successRate: number;
+  avgSizeBytes: number;
+  avgDurationMs: number;
+  recentCheckpoints: Array<{
+    id: string;
+    leaseId: string;
+    status: string;
+    sizeBytes: number;
+    durationMs: number;
+    createdAt: string;
+  }>;
+}
+
+export interface GkeNode {
+  nodeName: string;
+  nodePool: string | null;
+  zone: string;
+  gpuCount: number;
+  gpuType: string;
+  status: 'healthy' | 'degraded' | 'offline';
+  totalUtilization: number;
+  gpus: Array<{
+    gpuIndex: number;
+    status: string;
+    utilizationPercent: number;
+  }>;
+}
+
 export interface DashboardState {
   stats: {
     activeLeases: number;
@@ -29,6 +90,11 @@ export interface DashboardState {
     summary: string;
     leaseId: string | null;
   }>;
+  gpuUtilization: GpuUtilization[];
+  tenantBreakdown: TenantBreakdown[];
+  costAnalytics: CostAnalytics;
+  checkpointAnalytics: CheckpointAnalytics;
+  gkeNodes: GkeNode[];
   updatedAt: string;
 }
 
@@ -47,6 +113,27 @@ const initialState: DashboardState = {
   },
   leases: [],
   events: [],
+  gpuUtilization: [],
+  tenantBreakdown: [],
+  costAnalytics: {
+    hourly: [],
+    daily: [],
+    totalBaselineCostUsd: 0,
+    totalActualCostUsd: 0,
+    totalSavingsUsd: 0,
+    savingsPercent: 0,
+  },
+  checkpointAnalytics: {
+    total: 0,
+    complete: 0,
+    restored: 0,
+    failed: 0,
+    successRate: 0,
+    avgSizeBytes: 0,
+    avgDurationMs: 0,
+    recentCheckpoints: [],
+  },
+  gkeNodes: [],
   updatedAt: new Date().toISOString(),
 };
 
@@ -99,6 +186,11 @@ export function useDashboard() {
             summary: e.reasoning || (e.eventType || (e as unknown as { type: string }).type).replace(/_/g, ' '),
             leaseId: e.leaseId || (e as unknown as { lease_id: string | null }).lease_id,
           })),
+          gpuUtilization: dashboardRes.gpuUtilization || [],
+          tenantBreakdown: dashboardRes.tenantBreakdown || [],
+          costAnalytics: dashboardRes.costAnalytics || initialState.costAnalytics,
+          checkpointAnalytics: dashboardRes.checkpointAnalytics || initialState.checkpointAnalytics,
+          gkeNodes: dashboardRes.gkeNodes || [],
           updatedAt: dashboardRes.updated_at,
         });
       }
@@ -145,6 +237,11 @@ export function useDashboard() {
               },
               leases: data.leases,
               events: data.events,
+              gpuUtilization: data.gpuUtilization || [],
+              tenantBreakdown: data.tenantBreakdown || [],
+              costAnalytics: data.costAnalytics || initialState.costAnalytics,
+              checkpointAnalytics: data.checkpointAnalytics || initialState.checkpointAnalytics,
+              gkeNodes: data.gkeNodes || [],
               updatedAt: data.updatedAt,
             });
           }
