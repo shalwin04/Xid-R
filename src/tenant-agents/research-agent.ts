@@ -120,7 +120,12 @@ export class ResearchAgent extends CheckpointableAgent {
         }),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as {
+        status: string;
+        lease_id: string;
+        capacity_unit_id?: string;
+        queue_position?: number;
+      };
 
       if (result.status === "granted") {
         this.leaseId = result.lease_id;
@@ -277,7 +282,10 @@ export class ResearchAgent extends CheckpointableAgent {
         body: JSON.stringify({ lease_id: this.leaseId }),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as {
+        billable_seconds?: number;
+        savings_usd?: number;
+      };
       log.info("GPU released", {
         leaseId: this.leaseId,
         billableSeconds: result.billable_seconds,
@@ -354,5 +362,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   });
 }
-
-export { ResearchAgent };

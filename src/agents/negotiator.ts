@@ -253,8 +253,8 @@ export class NegotiatorAgent extends EventEmitter<NegotiatorEvents> {
         return null;
       }
 
-      const result = await response.json();
-      return result.data as T;
+      const result = (await response.json()) as { data: T };
+      return result.data;
     } catch (error) {
       if ((error as Error).name === "AbortError") {
         log.debug("A2A request timed out or cancelled", { endpoint });

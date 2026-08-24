@@ -25,8 +25,12 @@ import { recordAuditEvent } from "../db/audit.js";
 import { EventType, EventSource } from "../models/audit.js";
 import { CapacityStatus, CapacityType, TrustTier, IsolationMode } from "../models/capacity.js";
 import { initFirestore } from "../db/firestore.js";
+import { getGKEDiscovery } from "./gke-discovery.js";
 
 const log = createLogger({ module: "capacity-fabric" });
+
+// Enable real GKE discovery via environment variable
+const USE_REAL_GKE = process.env.USE_REAL_GKE === "true";
 
 export interface CapacityFabricEvents {
   capacityDiscovered: (unitId: string, gpuType: string) => void;
@@ -114,23 +118,32 @@ export class CapacityFabric extends EventEmitter<CapacityFabricEvents> {
    * For MVP/demo, we use simulated instances.
    */
   async discoverCapacity(): Promise<void> {
-    log.info("Discovering capacity");
+    log.info("Discovering capacity", { useRealGKE: USE_REAL_GKE });
 
     try {
-      // For demo: create simulated capacity if none exists
-      const existing = await getAllCapacityUnits();
+      if (USE_REAL_GKE) {
+        // Use real GKE discovery
+        const gkeDiscovery = getGKEDiscovery();
+        await gkeDiscovery.discoverNodes();
+        log.info("Real GKE capacity discovery complete");
+      } else {
+        // For demo: create simulated capacity if none exists
+        const existing = await getAllCapacityUnits();
 
-      if (existing.length === 0) {
-        await this.seedDemoCapacity();
+        if (existing.length === 0) {
+          await this.seedDemoCapacity();
+        }
+
+        log.info("Demo capacity discovery complete", { units: existing.length });
       }
-
-      // In production: query actual GCP resources
-      // await this.discoverGKECapacity();
-      // await this.discoverSpotVMs();
-
-      log.info("Capacity discovery complete", { units: existing.length });
     } catch (error) {
       log.error("Capacity discovery failed", { error: (error as Error).message });
+
+      // Fall back to demo capacity if real discovery fails
+      if (USE_REAL_GKE) {
+        log.warn("Falling back to demo capacity");
+        await this.seedDemoCapacity();
+      }
     }
   }
 
@@ -223,22 +236,29 @@ export class CapacityFabric extends EventEmitter<CapacityFabricEvents> {
    */
   async pollUtilization(): Promise<void> {
     try {
-      const units = await getAllCapacityUnits();
-
-      for (const unit of units) {
+      if (USE_REAL_GKE) {
+        // Use real Cloud Monitoring metrics
+        const gkeDiscovery = getGKEDiscovery();
+        await gkeDiscovery.updateAllUtilization();
+        log.debug("Real utilization poll complete");
+      } else {
         // For demo: simulate utilization
-        const utilization = this.simulateUtilization(unit.id, unit.status);
+        const units = await getAllCapacityUnits();
 
-        await updateUtilization(
-          unit.id,
-          utilization,
-          this.config.capacity.idleThresholdPercent
-        );
+        for (const unit of units) {
+          const utilization = this.simulateUtilization(unit.id, unit.status);
 
-        this.emit("utilizationUpdated", unit.id, utilization);
+          await updateUtilization(
+            unit.id,
+            utilization,
+            this.config.capacity.idleThresholdPercent
+          );
+
+          this.emit("utilizationUpdated", unit.id, utilization);
+        }
+
+        log.debug("Simulated utilization poll complete", { units: units.length });
       }
-
-      log.debug("Utilization poll complete", { units: units.length });
     } catch (error) {
       log.error("Utilization poll failed", { error: (error as Error).message });
     }

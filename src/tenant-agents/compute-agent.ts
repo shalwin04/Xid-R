@@ -123,7 +123,11 @@ export class ComputeAgent extends CheckpointableAgent {
         }),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as {
+        status: string;
+        lease_id: string;
+        capacity_unit_id?: string;
+      };
 
       if (result.status === "granted") {
         this.leaseId = result.lease_id;
@@ -333,7 +337,7 @@ export class ComputeAgent extends CheckpointableAgent {
         body: JSON.stringify({ lease_id: this.leaseId }),
       });
 
-      const result = await response.json();
+      const result = (await response.json()) as { savings_usd?: number };
       log.info("GPU released", { savingsUsd: result.savings_usd });
       this.leaseId = null;
     } catch (error) {
@@ -419,5 +423,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     process.exit(1);
   });
 }
-
-export { ComputeAgent };

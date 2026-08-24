@@ -2,12 +2,12 @@
  * Structured logging for Xid-R.
  */
 
-import pino from "pino";
+import { pino, Logger } from "pino";
 import { getConfig } from "../config.js";
 
 const config = getConfig();
 
-export const logger = pino({
+export const logger: Logger = pino({
   level: config.api.debug ? "debug" : "info",
   transport:
     config.environment === "development"

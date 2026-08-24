@@ -243,3 +243,138 @@ export async function getCapacitySummary(): Promise<{
 
   return summary;
 }
+
+/**
+ * Get GPU utilization data for all capacity units.
+ */
+export async function getGpuUtilization(): Promise<
+  Array<{
+    id: string;
+    instanceName: string | null;
+    gpuType: string;
+    gpuIndex: number;
+    status: string;
+    utilizationPercent: number;
+    utilizationUpdatedAt: string;
+    memoryGb: number;
+    zone: string;
+    type: string;
+    currentLeaseId: string | null;
+  }>
+> {
+  const units = await getAllCapacityUnits();
+
+  return units.map((unit) => ({
+    id: unit.id,
+    instanceName: unit.instanceName,
+    gpuType: unit.gpuType,
+    gpuIndex: unit.gpuIndex,
+    status: unit.status,
+    utilizationPercent: unit.utilizationPercent,
+    utilizationUpdatedAt: unit.utilizationUpdatedAt.toISOString(),
+    memoryGb: unit.memoryGb,
+    zone: unit.zone,
+    type: unit.type,
+    currentLeaseId: unit.currentLeaseId,
+  }));
+}
+
+/**
+ * Get GKE node health status.
+ */
+export async function getGkeNodeStatus(): Promise<
+  Array<{
+    nodeName: string;
+    nodePool: string | null;
+    zone: string;
+    gpuCount: number;
+    gpuType: string;
+    status: "healthy" | "degraded" | "offline";
+    totalUtilization: number;
+    gpus: Array<{
+      gpuIndex: number;
+      status: string;
+      utilizationPercent: number;
+      currentLeaseId: string | null;
+    }>;
+  }>
+> {
+  const units = await getAllCapacityUnits();
+
+  // Group by instance name (node)
+  const nodeMap = new Map<
+    string,
+    {
+      nodeName: string;
+      nodePool: string | null;
+      zone: string;
+      gpuType: string;
+      gpus: Array<{
+        gpuIndex: number;
+        status: string;
+        utilizationPercent: number;
+        currentLeaseId: string | null;
+      }>;
+    }
+  >();
+
+  for (const unit of units) {
+    // Only include GKE nodes
+    if (unit.type !== "gke_node_gpu") continue;
+
+    const nodeName = unit.instanceName || unit.id;
+
+    if (!nodeMap.has(nodeName)) {
+      nodeMap.set(nodeName, {
+        nodeName,
+        nodePool: unit.nodePool,
+        zone: unit.zone,
+        gpuType: unit.gpuType,
+        gpus: [],
+      });
+    }
+
+    const node = nodeMap.get(nodeName)!;
+    node.gpus.push({
+      gpuIndex: unit.gpuIndex,
+      status: unit.status,
+      utilizationPercent: unit.utilizationPercent,
+      currentLeaseId: unit.currentLeaseId,
+    });
+  }
+
+  // Calculate node status and average utilization
+  return Array.from(nodeMap.values()).map((node) => {
+    const gpuCount = node.gpus.length;
+    const totalUtilization =
+      gpuCount > 0
+        ? Math.round(
+            node.gpus.reduce((sum, gpu) => sum + gpu.utilizationPercent, 0) / gpuCount
+          )
+        : 0;
+
+    // Determine node health
+    const drainingGpus = node.gpus.filter((g) => g.status === "draining").length;
+    const offlineGpus = node.gpus.filter(
+      (g) => g.status !== "available" && g.status !== "leased" && g.status !== "harvestable"
+    ).length;
+
+    let status: "healthy" | "degraded" | "offline" = "healthy";
+    if (offlineGpus === gpuCount) {
+      status = "offline";
+    } else if (drainingGpus > 0 || offlineGpus > 0) {
+      status = "degraded";
+    }
+
+    return {
+      nodeName: node.nodeName,
+      nodePool: node.nodePool,
+      zone: node.zone,
+      gpuCount,
+      gpuType: node.gpuType,
+      status,
+      totalUtilization,
+      gpus: node.gpus.sort((a, b) => a.gpuIndex - b.gpuIndex),
+    };
+  });
+}

@@ -58,6 +58,9 @@ export const LeaseSchema = z.object({
     "lost",
   ]),
 
+  // Tenant (for multi-tenant isolation)
+  tenantId: z.string().nullable().default(null),
+
   // Request details
   tenantAgentId: z.string(),
   requestedAt: z.date(),
@@ -104,6 +107,7 @@ export const LeaseSchema = z.object({
 export type Lease = z.infer<typeof LeaseSchema>;
 
 export interface CreateLeaseInput {
+  tenantId?: string;
   tenantAgentId: string;
   gpuType: string;
   durationHintSeconds?: number;
@@ -122,8 +126,10 @@ export interface LeaseConnectionInfo {
  * Check if lease is in an active state.
  */
 export function isLeaseActive(lease: Lease): boolean {
-  return [LeaseStatus.ACTIVE, LeaseStatus.NEGOTIATING, LeaseStatus.CHECKPOINTING].includes(
-    lease.status as LeaseStatus
+  return (
+    lease.status === LeaseStatus.ACTIVE ||
+    lease.status === LeaseStatus.NEGOTIATING ||
+    lease.status === LeaseStatus.CHECKPOINTING
   );
 }
 
@@ -131,7 +137,7 @@ export function isLeaseActive(lease: Lease): boolean {
  * Check if lease is in a terminal state.
  */
 export function isLeaseTerminal(lease: Lease): boolean {
-  return [LeaseStatus.COMPLETED, LeaseStatus.LOST].includes(lease.status as LeaseStatus);
+  return lease.status === LeaseStatus.COMPLETED || lease.status === LeaseStatus.LOST;
 }
 
 /**

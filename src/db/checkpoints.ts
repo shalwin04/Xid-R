@@ -191,3 +191,106 @@ export async function getCheckpointStats(): Promise<{
     avgDurationMs: durationCount > 0 ? Math.round(totalDurationMs / durationCount) : 0,
   };
 }
+
+/**
+ * Get detailed checkpoint analytics.
+ */
+export async function getCheckpointAnalytics(): Promise<{
+  total: number;
+  complete: number;
+  restored: number;
+  failed: number;
+  expired: number;
+  totalSizeBytes: number;
+  avgSizeBytes: number;
+  avgDurationMs: number;
+  minDurationMs: number;
+  maxDurationMs: number;
+  successRate: number;
+  recentCheckpoints: Array<{
+    id: string;
+    leaseId: string;
+    status: string;
+    sizeBytes: number;
+    durationMs: number;
+    createdAt: string;
+  }>;
+}> {
+  const snapshot = await getCollection(Collections.CHECKPOINTS)
+    .orderBy("createdAt", "desc")
+    .limit(100)
+    .get();
+
+  let complete = 0;
+  let restored = 0;
+  let failed = 0;
+  let expired = 0;
+  let totalSizeBytes = 0;
+  let totalDurationMs = 0;
+  let durationCount = 0;
+  let minDurationMs = Infinity;
+  let maxDurationMs = 0;
+
+  const recentCheckpoints: Array<{
+    id: string;
+    leaseId: string;
+    status: string;
+    sizeBytes: number;
+    durationMs: number;
+    createdAt: string;
+  }> = [];
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    const status = data.status as string;
+
+    if (status === CheckpointStatus.COMPLETE) complete++;
+    else if (status === CheckpointStatus.RESTORED) restored++;
+    else if (status === CheckpointStatus.FAILED) failed++;
+    else if (status === CheckpointStatus.EXPIRED) expired++;
+
+    const sizeBytes = (data.sizeBytes as number) || 0;
+    const durationMs = (data.durationMs as number) || 0;
+
+    totalSizeBytes += sizeBytes;
+
+    if (durationMs > 0) {
+      totalDurationMs += durationMs;
+      durationCount++;
+      minDurationMs = Math.min(minDurationMs, durationMs);
+      maxDurationMs = Math.max(maxDurationMs, durationMs);
+    }
+
+    // Add to recent list (top 10)
+    if (recentCheckpoints.length < 10) {
+      const createdAt = data.createdAt?.toDate?.() ?? new Date(data.createdAt as string);
+      recentCheckpoints.push({
+        id: doc.id,
+        leaseId: data.leaseId as string,
+        status,
+        sizeBytes,
+        durationMs,
+        createdAt: createdAt.toISOString(),
+      });
+    }
+  }
+
+  const total = snapshot.docs.length;
+  const successfulCount = complete + restored;
+  const successRate = total > 0 ? (successfulCount / total) * 100 : 0;
+
+  return {
+    total,
+    complete,
+    restored,
+    failed,
+    expired,
+    totalSizeBytes,
+    avgSizeBytes: total > 0 ? Math.round(totalSizeBytes / total) : 0,
+    avgDurationMs: durationCount > 0 ? Math.round(totalDurationMs / durationCount) : 0,
+    minDurationMs: minDurationMs === Infinity ? 0 : minDurationMs,
+    maxDurationMs,
+    successRate: Math.round(successRate * 100) / 100,
+    recentCheckpoints,
+  };
+}

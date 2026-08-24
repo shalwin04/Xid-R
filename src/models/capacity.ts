@@ -109,9 +109,7 @@ export interface CreateCapacityUnitInput {
  * Check if capacity unit is available for allocation.
  */
 export function isCapacityAvailable(unit: CapacityUnit): boolean {
-  return [CapacityStatus.AVAILABLE, CapacityStatus.HARVESTABLE].includes(
-    unit.status as CapacityStatus
-  );
+  return unit.status === CapacityStatus.AVAILABLE || unit.status === CapacityStatus.HARVESTABLE;
 }
 
 /**

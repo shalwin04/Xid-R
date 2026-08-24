@@ -46,6 +46,9 @@ mcpRoutes.post("/tools/xidr_request_gpu", zValidator("json", RequestGpuSchema), 
   const input = c.req.valid("json");
   const config = getConfig();
 
+  // Get tenant context (set by auth middleware)
+  const tenantId = c.get("tenantId") as string | undefined;
+
   try {
     // Register/update agent if ID provided
     const agentId = input.agent_id ?? `agent_${Date.now()}`;
@@ -58,8 +61,9 @@ mcpRoutes.post("/tools/xidr_request_gpu", zValidator("json", RequestGpuSchema), 
       });
     }
 
-    // Create lease request
+    // Create lease request with tenant context
     const lease = await createLease({
+      tenantId,
       tenantAgentId: agentId,
       gpuType: input.gpu_type,
       durationHintSeconds: input.duration_hint_seconds,

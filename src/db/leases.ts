@@ -24,6 +24,7 @@ export async function createLease(input: CreateLeaseInput): Promise<Lease> {
 
   const lease: Omit<Lease, "id"> = {
     status: LeaseStatus.PENDING,
+    tenantId: input.tenantId ?? null,
     tenantAgentId: input.tenantAgentId,
     requestedAt: now,
     gpuType: input.gpuType,
@@ -295,6 +296,140 @@ export async function getLeaseStats(): Promise<{
     pending: pending.data().count,
     completed: completed.data().count,
     lost: lost.data().count,
+    totalSavingsUsd,
+  };
+}
+
+/**
+ * Get leases grouped by tenant for usage breakdown.
+ */
+export async function getLeasesByTenant(): Promise<
+  Array<{
+    tenantId: string;
+    activeLeases: number;
+    totalLeases: number;
+    totalSavingsUsd: number;
+    totalBillableSeconds: number;
+  }>
+> {
+  const snapshot = await getCollection(Collections.LEASES).get();
+
+  const tenantMap = new Map<
+    string,
+    {
+      tenantId: string;
+      activeLeases: number;
+      totalLeases: number;
+      totalSavingsUsd: number;
+      totalBillableSeconds: number;
+    }
+  >();
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    const tenantId = (data.tenantId as string) || "unknown";
+
+    if (!tenantMap.has(tenantId)) {
+      tenantMap.set(tenantId, {
+        tenantId,
+        activeLeases: 0,
+        totalLeases: 0,
+        totalSavingsUsd: 0,
+        totalBillableSeconds: 0,
+      });
+    }
+
+    const entry = tenantMap.get(tenantId)!;
+    entry.totalLeases++;
+
+    if (
+      data.status === LeaseStatus.ACTIVE ||
+      data.status === LeaseStatus.NEGOTIATING
+    ) {
+      entry.activeLeases++;
+    }
+
+    entry.totalSavingsUsd += (data.savingsUsd as number) || 0;
+    entry.totalBillableSeconds += (data.billableSeconds as number) || 0;
+  }
+
+  return Array.from(tenantMap.values()).sort(
+    (a, b) => b.totalSavingsUsd - a.totalSavingsUsd
+  );
+}
+
+/**
+ * Get cost analytics - savings by time period.
+ */
+export async function getCostAnalytics(): Promise<{
+  hourly: Array<{ hour: string; savingsUsd: number; leaseCount: number }>;
+  daily: Array<{ date: string; savingsUsd: number; leaseCount: number }>;
+  totalBaselineCostUsd: number;
+  totalActualCostUsd: number;
+  totalSavingsUsd: number;
+}> {
+  const snapshot = await getCollection(Collections.LEASES)
+    .where("status", "==", LeaseStatus.COMPLETED)
+    .get();
+
+  const hourlyMap = new Map<string, { savingsUsd: number; leaseCount: number }>();
+  const dailyMap = new Map<string, { savingsUsd: number; leaseCount: number }>();
+
+  let totalBaselineCostUsd = 0;
+  let totalActualCostUsd = 0;
+  let totalSavingsUsd = 0;
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    const releasedAt = data.releasedAt?.toDate?.() ?? new Date(data.releasedAt as string);
+
+    if (!releasedAt) continue;
+
+    // Hourly bucket (last 24 hours)
+    const hourKey = releasedAt.toISOString().slice(0, 13) + ":00";
+    const dayKey = releasedAt.toISOString().slice(0, 10);
+
+    const savings = (data.savingsUsd as number) || 0;
+    const baseline = (data.baselineCostUsd as number) || 0;
+    const actual = (data.actualCostUsd as number) || 0;
+
+    totalBaselineCostUsd += baseline;
+    totalActualCostUsd += actual;
+    totalSavingsUsd += savings;
+
+    // Update hourly
+    if (!hourlyMap.has(hourKey)) {
+      hourlyMap.set(hourKey, { savingsUsd: 0, leaseCount: 0 });
+    }
+    const hourEntry = hourlyMap.get(hourKey)!;
+    hourEntry.savingsUsd += savings;
+    hourEntry.leaseCount++;
+
+    // Update daily
+    if (!dailyMap.has(dayKey)) {
+      dailyMap.set(dayKey, { savingsUsd: 0, leaseCount: 0 });
+    }
+    const dayEntry = dailyMap.get(dayKey)!;
+    dayEntry.savingsUsd += savings;
+    dayEntry.leaseCount++;
+  }
+
+  // Sort and return last 24 hours / 7 days
+  const hourly = Array.from(hourlyMap.entries())
+    .map(([hour, data]) => ({ hour, ...data }))
+    .sort((a, b) => a.hour.localeCompare(b.hour))
+    .slice(-24);
+
+  const daily = Array.from(dailyMap.entries())
+    .map(([date, data]) => ({ date, ...data }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-7);
+
+  return {
+    hourly,
+    daily,
+    totalBaselineCostUsd,
+    totalActualCostUsd,
     totalSavingsUsd,
   };
 }

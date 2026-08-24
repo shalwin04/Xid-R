@@ -21,6 +21,10 @@ import { leaseRoutes } from "./routes/leases.js";
 import { capacityRoutes } from "./routes/capacity.js";
 import { agentRoutes } from "./routes/agents.js";
 import { systemRoutes } from "./routes/system.js";
+import { tenantRoutes } from "./routes/tenants.js";
+
+// Import middleware
+import { devAuthBypass, optionalAuthMiddleware, rateLimitMiddleware } from "../middleware/auth.js";
 
 const log = createLogger({ module: "api" });
 
@@ -32,7 +36,7 @@ export function createApp() {
   app.use("*", cors({
     origin: config.api.corsOrigins,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization", "X-Request-ID"],
+    allowHeaders: ["Content-Type", "Authorization", "X-API-Key", "X-Request-ID"],
   }));
 
   app.use("*", honoLogger());
@@ -49,12 +53,25 @@ export function createApp() {
   // Health check
   app.get("/health", (c) => c.json({ status: "ok", version: "0.1.0" }));
 
+  // Optional auth + rate limiting for all API routes
+  // Apply auth first, then dev bypass only if no auth provided
+  app.use("/api/*", optionalAuthMiddleware(), rateLimitMiddleware());
+  app.use("/mcp/*", optionalAuthMiddleware());
+
+  // Dev mode: bypass auth for local development (only if no auth provided)
+  if (config.environment === "development") {
+    app.use("/mcp/*", devAuthBypass());
+    app.use("/api/*", devAuthBypass());
+    log.warn("Development mode: auth bypass enabled for unauthenticated requests");
+  }
+
   // Mount routes
   app.route("/mcp", mcpRoutes);
   app.route("/api/leases", leaseRoutes);
   app.route("/api/capacity", capacityRoutes);
   app.route("/api/agents", agentRoutes);
   app.route("/api/system", systemRoutes);
+  app.route("/api/tenants", tenantRoutes);
 
   // 404 handler
   app.notFound((c) => {

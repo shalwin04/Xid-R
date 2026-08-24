@@ -18,7 +18,7 @@ import { logger as honoLogger } from "hono/logger";
 // Import from SDK (using relative path for monorepo)
 // In production: import from "@xidr/agent-sdk"
 import type { XidrCheckpointable } from "../../packages/agent-sdk/src/checkpoint.js";
-import { InMemoryCheckpointManager } from "../../packages/agent-sdk/src/checkpoint.js";
+import { CheckpointManager } from "../../packages/agent-sdk/src/checkpoint.js";
 import { createA2ARoutes } from "../../packages/agent-sdk/src/middleware.js";
 import { XidrClient } from "../../packages/agent-sdk/src/client.js";
 
@@ -275,8 +275,14 @@ async function main() {
 
   // Create agent and managers
   const agent = new DemoAgent();
-  const checkpointManager = new InMemoryCheckpointManager();
+  const useGCS = process.env.USE_GCS_CHECKPOINTS === "true";
+  const checkpointManager = new CheckpointManager({
+    agentType: "demo-agent",
+    bucket: process.env.CHECKPOINT_BUCKET ?? "xidr-demo-checkpoints",
+  });
   const xidrClient = new XidrClient({ baseUrl: XIDR_URL });
+
+  console.log(`[demo-agent] Checkpoint storage: GCS (bucket: ${process.env.CHECKPOINT_BUCKET ?? "xidr-demo-checkpoints"})`);
 
   // Create Hono app
   const app = new Hono();
@@ -318,12 +324,11 @@ async function main() {
           estimated_seconds: estimatedSeconds,
         });
 
-        // Perform checkpoint
+        // Perform checkpoint (CheckpointManager takes 3 args, agentType is set in constructor)
         const result = await checkpointManager.checkpoint(
           agent,
           checkpointOption.target,
-          request.lease_id,
-          "demo-agent"
+          request.lease_id
         );
 
         if (result.success) {
@@ -348,10 +353,13 @@ async function main() {
             chosen_action: "checkpoint" as const,
             estimated_duration_seconds: estimatedSeconds,
           };
+        } else {
+          ctx.log("Checkpoint failed", { error: result.error });
         }
       }
 
       // No checkpoint or failed - accept loss
+      ctx.log("Accepting loss - no checkpoint available or checkpoint failed");
       return {
         type: "reclaim_response" as const,
         lease_id: request.lease_id,
