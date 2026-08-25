@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "xidr-agent.fullname" . }}-config
+  namespace: {{ include "xidr-agent.namespace" . }}
+  labels:
+    {{- include "xidr-agent.labels" . | nindent 4 }}
+data:
+  # Control plane endpoint
+  XIDR_API_ENDPOINT: {{ .Values.apiEndpoint | quote }}
+
+  # Polling intervals
+  UTILIZATION_POLL_INTERVAL: {{ .Values.config.utilizationPollInterval | quote }}
+  HEARTBEAT_INTERVAL: {{ .Values.config.heartbeatInterval | quote }}
+  METRICS_SCRAPE_INTERVAL: {{ .Values.config.metricsScrapeInterval | quote }}
+
+  # GPU monitoring
+  GPU_IDLE_THRESHOLD_PERCENT: {{ .Values.config.gpuIdleThresholdPercent | quote }}
+  GPU_IDLE_DURATION_SECONDS: {{ .Values.config.gpuIdleDurationSeconds | quote }}
+
+  # Checkpoint settings
+  CHECKPOINT_STORAGE_CLASS: {{ .Values.config.checkpointStorageClass | quote }}
+  CHECKPOINT_RETENTION_HOURS: {{ .Values.config.checkpointRetentionHours | quote }}
+
+  # Logging
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+
+  # Metrics
+  ENABLE_METRICS_EXPORT: {{ .Values.config.enableMetricsExport | quote }}
+  METRICS_PORT: {{ .Values.config.metricsPort | quote }}
+
+  # A2A settings
+  A2A_SERVER_PORT: {{ .Values.config.a2aServerPort | quote }}
+  A2A_TASK_TIMEOUT_SECONDS: {{ .Values.config.a2aTaskTimeoutSeconds | quote }}
+
+  # Capacity lanes
+  ENABLE_MPS_SHARING: {{ .Values.config.enableMpsSharing | quote }}
+  ENABLE_MIG_PARTITIONING: {{ .Values.config.enableMigPartitioning | quote }}
+
+  # Preemption settings
+  GRACEFUL_SHUTDOWN_SECONDS: {{ .Values.config.gracefulShutdownSeconds | quote }}
+  CHECKPOINT_WARNING_SECONDS: {{ .Values.config.checkpointWarningSeconds | quote }}

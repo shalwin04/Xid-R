@@ -1,0 +1,104 @@
+# Xid-R Agent RBAC Configuration
+# Provides necessary permissions for GPU monitoring and workload management
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: xidr-agent
+  labels:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: xidr-system
+rules:
+  # Node access for GPU monitoring
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes/status"]
+    verbs: ["get"]
+
+  # Pod management for workload orchestration
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+  # Events for audit logging
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+
+  # ConfigMaps and Secrets for configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+
+  # Namespace access
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+
+  # Deployments and StatefulSets for workload management
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "replicasets", "daemonsets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+
+  # Jobs and CronJobs for batch workloads
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Resource quotas and limits
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch"]
+
+  # PriorityClasses for preemption
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch"]
+
+  # Metrics for utilization monitoring
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+
+  # Custom resources for GPU management (NVIDIA GPU Operator)
+  - apiGroups: ["nvidia.com"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+
+  # Node Feature Discovery
+  - apiGroups: ["nfd.k8s-sigs.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: xidr-agent
+  labels:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: xidr-system
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: xidr-agent
+subjects:
+  - kind: ServiceAccount
+    name: xidr-agent
+    namespace: xidr-system

@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "xidr-agent.fullname" . }}
+  namespace: {{ include "xidr-agent.namespace" . }}
+  labels:
+    {{- include "xidr-agent.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: a2a
+      port: {{ .Values.service.a2aPort }}
+      targetPort: a2a
+      protocol: TCP
+    - name: metrics
+      port: {{ .Values.service.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "xidr-agent.selectorLabels" . | nindent 4 }}

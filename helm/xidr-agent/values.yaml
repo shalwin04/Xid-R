@@ -1,0 +1,156 @@
+# Xid-R Agent Helm Values
+# Default values for xidr-agent chart
+
+# Required: Organization and cluster identifiers
+organizationId: ""
+clusterId: ""
+
+# API configuration
+apiEndpoint: "https://api.xidr.dev"
+apiToken: ""
+
+# Image configuration
+image:
+  repository: gcr.io/xidr-prod/xidr-agent
+  tag: "latest"
+  pullPolicy: Always
+
+imagePullSecrets: []
+
+# Service account configuration
+serviceAccount:
+  create: true
+  name: xidr-agent
+  annotations: {}
+    # For GKE Workload Identity:
+    # iam.gke.io/gcp-service-account: xidr-agent@PROJECT_ID.iam.gserviceaccount.com
+
+# RBAC configuration
+rbac:
+  create: true
+
+# Deployment configuration
+replicaCount: 1
+
+# Pod configuration
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "9090"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Resource limits
+resources:
+  requests:
+    cpu: "100m"
+    memory: "256Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+# Node selection
+nodeSelector: {}
+
+# Tolerations for GPU nodes
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+# Affinity - prefer GPU nodes
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: nvidia.com/gpu.present
+              operator: In
+              values: ["true"]
+
+# Service configuration
+service:
+  type: ClusterIP
+  a2aPort: 8080
+  metricsPort: 9090
+
+# Monitoring configuration
+monitoring:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+
+# Agent configuration
+config:
+  # Polling intervals (seconds)
+  utilizationPollInterval: 30
+  heartbeatInterval: 60
+  metricsScrapeInterval: 15
+
+  # GPU idle detection
+  gpuIdleThresholdPercent: 10
+  gpuIdleDurationSeconds: 300
+
+  # Checkpoint settings
+  checkpointStorageClass: "standard"
+  checkpointRetentionHours: 24
+
+  # Logging
+  logLevel: "info"
+
+  # Metrics
+  enableMetricsExport: true
+  metricsPort: 9090
+
+  # A2A settings
+  a2aServerPort: 8080
+  a2aTaskTimeoutSeconds: 120
+
+  # Capacity lanes
+  enableMpsSharing: true
+  enableMigPartitioning: false
+
+  # Preemption
+  gracefulShutdownSeconds: 120
+  checkpointWarningSeconds: 30
+
+# Health check configuration
+healthCheck:
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startupProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 30
+
+# Extra environment variables
+extraEnv: []
+# - name: EXTRA_VAR
+#   value: "value"
+
+# Extra volume mounts
+extraVolumeMounts: []
+
+# Extra volumes
+extraVolumes: []

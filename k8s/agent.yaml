@@ -1,0 +1,286 @@
+# Xid-R Agent - Single-file installation manifest
+# Generated for easy kubectl apply installation
+#
+# Usage: kubectl apply -f https://api.xidr.dev/install/agent.yaml
+#
+# After applying, configure the agent:
+#   kubectl create secret generic xidr-agent-secrets -n xidr-system \
+#     --from-literal=XIDR_ORGANIZATION_ID=<your-org-id> \
+#     --from-literal=XIDR_CLUSTER_ID=<your-cluster-id> \
+#     --from-literal=XIDR_API_TOKEN=<your-api-token>
+#
+# Or use Helm for a more customizable installation.
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: xidr-system
+  labels:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: xidr-system
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: xidr-agent
+  namespace: xidr-system
+  labels:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+---
+# ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: xidr-agent
+  labels:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes/status"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "replicasets", "daemonsets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+  - apiGroups: ["nvidia.com"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["nfd.k8s-sigs.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+---
+# ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: xidr-agent
+  labels:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: xidr-agent
+subjects:
+  - kind: ServiceAccount
+    name: xidr-agent
+    namespace: xidr-system
+---
+# ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: xidr-agent-config
+  namespace: xidr-system
+  labels:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+data:
+  XIDR_API_ENDPOINT: "https://api.xidr.dev"
+  UTILIZATION_POLL_INTERVAL: "30"
+  HEARTBEAT_INTERVAL: "60"
+  METRICS_SCRAPE_INTERVAL: "15"
+  GPU_IDLE_THRESHOLD_PERCENT: "10"
+  GPU_IDLE_DURATION_SECONDS: "300"
+  CHECKPOINT_STORAGE_CLASS: "standard"
+  CHECKPOINT_RETENTION_HOURS: "24"
+  LOG_LEVEL: "info"
+  ENABLE_METRICS_EXPORT: "true"
+  METRICS_PORT: "9090"
+  A2A_SERVER_PORT: "8080"
+  A2A_TASK_TIMEOUT_SECONDS: "120"
+  ENABLE_MPS_SHARING: "true"
+  ENABLE_MIG_PARTITIONING: "false"
+  GRACEFUL_SHUTDOWN_SECONDS: "120"
+  CHECKPOINT_WARNING_SECONDS: "30"
+---
+# Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: xidr-agent
+  namespace: xidr-system
+  labels:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: xidr
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: xidr
+        app.kubernetes.io/component: agent
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: xidr-agent
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: nvidia.com/gpu.present
+                    operator: In
+                    values: ["true"]
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: agent
+          image: gcr.io/xidr-prod/xidr-agent:latest
+          imagePullPolicy: Always
+          ports:
+            - name: a2a
+              containerPort: 8080
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: xidr-agent-config
+            - secretRef:
+                name: xidr-agent-secrets
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/xidr
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir:
+            sizeLimit: 100Mi
+      terminationGracePeriodSeconds: 300
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: xidr-agent
+  namespace: xidr-system
+  labels:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+spec:
+  type: ClusterIP
+  ports:
+    - name: a2a
+      port: 8080
+      targetPort: a2a
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent

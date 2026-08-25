@@ -1,0 +1,26 @@
+apiVersion: v2
+name: xidr-agent
+description: Xid-R Agent - GPU compute broker agent for harvesting idle capacity
+
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - gpu
+  - kubernetes
+  - ai
+  - machine-learning
+  - compute
+  - broker
+
+home: https://xidr.dev
+sources:
+  - https://github.com/xidr-dev/xidr
+
+maintainers:
+  - name: Xid-R Team
+    email: team@xidr.dev
+
+annotations:
+  category: AI/ML Infrastructure

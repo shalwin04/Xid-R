@@ -1,0 +1,26 @@
+================================================================================
+  Xid-R Agent has been successfully deployed!
+================================================================================
+
+Organization ID: {{ .Values.organizationId }}
+Cluster ID: {{ .Values.clusterId }}
+API Endpoint: {{ .Values.apiEndpoint }}
+
+The agent is now running and will:
+  1. Monitor GPU utilization across all nodes
+  2. Report idle capacity to the Xid-R control plane
+  3. Handle checkpoint/resume coordination for workloads
+  4. Respond to A2A negotiation requests
+
+To check the agent status:
+  kubectl get pods -n {{ include "xidr-agent.namespace" . }} -l app.kubernetes.io/name={{ include "xidr-agent.name" . }}
+
+To view agent logs:
+  kubectl logs -n {{ include "xidr-agent.namespace" . }} -l app.kubernetes.io/name={{ include "xidr-agent.name" . }} -f
+
+To view metrics (if enabled):
+  kubectl port-forward -n {{ include "xidr-agent.namespace" . }} svc/{{ include "xidr-agent.fullname" . }} 9090:9090
+  Then open: http://localhost:9090/metrics
+
+For more information, visit: https://docs.xidr.dev/agent
+================================================================================

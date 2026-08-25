@@ -1,0 +1,46 @@
+# Xid-R Agent Service
+# Exposes the A2A endpoint for agent-to-agent communication
+apiVersion: v1
+kind: Service
+metadata:
+  name: xidr-agent
+  namespace: xidr-system
+  labels:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: xidr-system
+spec:
+  type: ClusterIP
+  ports:
+    - name: a2a
+      port: 8080
+      targetPort: a2a
+      protocol: TCP
+    - name: metrics
+      port: 9090
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+
+---
+# ServiceMonitor for Prometheus Operator (optional)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: xidr-agent
+  namespace: xidr-system
+  labels:
+    app.kubernetes.io/name: xidr
+    app.kubernetes.io/component: agent
+    app.kubernetes.io/part-of: xidr-system
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: xidr
+      app.kubernetes.io/component: agent
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

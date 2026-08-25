@@ -15,8 +15,7 @@ import { getCapacityFabric } from "../src/capacity/fabric.js";
 import { SchedulerAgent } from "../src/agents/scheduler.js";
 import { getNegotiator } from "../src/agents/negotiator.js";
 import { getPreemptionHandler } from "../src/capacity/preemption.js";
-import { createApp, startServer } from "../src/api/server.js";
-import { DashboardServer } from "../src/dashboard/server.js";
+import { startServer } from "../src/index.js";
 import { getAllCapacityUnits } from "../src/db/capacity.js";
 import { getLeasesByStatus } from "../src/db/leases.js";
 import { LeaseStatus } from "../src/models/lease.js";
@@ -49,7 +48,9 @@ async function runDemo(): Promise<void> {
   // Initialize services
   log.info("Step 1: Initializing services...");
 
-  initFirestore();
+  // Start unified server (API + WebSocket)
+  await startServer();
+  await sleep(2000);
 
   // Start capacity fabric
   const capacityFabric = getCapacityFabric();
@@ -170,13 +171,22 @@ async function runDemo(): Promise<void> {
 
   // Show xidr_explain
   log.info("Step 6: Explaining decisions with xidr_explain...");
-  const activeLeases = await getLeasesByStatus(LeaseStatus.ACTIVE);
-  if (activeLeases.length > 0) {
+
+  // Try to find any lease to explain (active, lost, or completed)
+  let leaseToExplain = (await getLeasesByStatus(LeaseStatus.ACTIVE))[0];
+  if (!leaseToExplain) {
+    leaseToExplain = (await getLeasesByStatus(LeaseStatus.LOST))[0];
+  }
+  if (!leaseToExplain) {
+    leaseToExplain = (await getLeasesByStatus(LeaseStatus.COMPLETED))[0];
+  }
+
+  if (leaseToExplain) {
     const explainRes = await fetch("http://localhost:8080/mcp/tools/xidr_explain", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        lease_id: activeLeases[0].id,
+        lease_id: leaseToExplain.id,
       }),
     });
     const explanation = await explainRes.json();
@@ -186,20 +196,28 @@ async function runDemo(): Promise<void> {
     console.log(`Lease: ${explanation.lease_id}`);
     console.log(`Status: ${explanation.lease_status}`);
     console.log(`\nExplanation: ${explanation.explanation}`);
-    console.log(`\nDecision Factors: ${explanation.decision_factors.join(", ")}`);
+    if (explanation.decision_factors) {
+      console.log(`\nDecision Factors: ${explanation.decision_factors.join(", ")}`);
+    }
     console.log("\nTimeline:");
-    for (const event of explanation.timeline.slice(0, 5)) {
+    for (const event of (explanation.timeline || []).slice(0, 5)) {
       console.log(`  [${event.timestamp}] ${event.event}`);
       console.log(`    ${event.details}`);
     }
+  } else {
+    console.log("\nNo leases found to explain.");
   }
 
   console.log("\n" + "═".repeat(60));
   console.log("Demo Complete!");
   console.log("");
-  console.log("Dashboard: http://localhost:8081");
-  console.log("API: http://localhost:8080");
-  console.log("MCP Tools: http://localhost:8080/mcp/tools");
+  console.log("Server: http://localhost:8080");
+  console.log("  - API: http://localhost:8080/api");
+  console.log("  - MCP Tools: http://localhost:8080/mcp/tools");
+  console.log("  - WebSocket: ws://localhost:8080");
+  console.log("  - Health: http://localhost:8080/health");
+  console.log("");
+  console.log("Frontend: http://localhost:3000 (run 'npm run web')");
   console.log("═".repeat(60) + "\n");
 
   // Keep running

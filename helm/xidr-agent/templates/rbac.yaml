@@ -1,0 +1,99 @@
+{{- if .Values.rbac.create -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "xidr-agent.fullname" . }}
+  labels:
+    {{- include "xidr-agent.labels" . | nindent 4 }}
+rules:
+  # Node access for GPU monitoring
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes/status"]
+    verbs: ["get"]
+
+  # Pod management for workload orchestration
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+
+  # Events for audit logging
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+
+  # ConfigMaps and Secrets
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "watch"]
+
+  # Namespace access
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+
+  # Workload management
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "replicasets", "daemonsets"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+
+  # Batch workloads
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+
+  # Resource quotas
+  - apiGroups: [""]
+    resources: ["resourcequotas", "limitranges"]
+    verbs: ["get", "list", "watch"]
+
+  # Priority classes
+  - apiGroups: ["scheduling.k8s.io"]
+    resources: ["priorityclasses"]
+    verbs: ["get", "list", "watch"]
+
+  # Metrics
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list"]
+
+  # NVIDIA GPU resources
+  - apiGroups: ["nvidia.com"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+
+  # Node Feature Discovery
+  - apiGroups: ["nfd.k8s-sigs.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "xidr-agent.fullname" . }}
+  labels:
+    {{- include "xidr-agent.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "xidr-agent.fullname" . }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "xidr-agent.serviceAccountName" . }}
+    namespace: {{ include "xidr-agent.namespace" . }}
+{{- end }}

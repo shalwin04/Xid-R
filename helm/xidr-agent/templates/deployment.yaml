@@ -1,0 +1,125 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "xidr-agent.fullname" . }}
+  namespace: {{ include "xidr-agent.namespace" . }}
+  labels:
+    {{- include "xidr-agent.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "xidr-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "xidr-agent.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "xidr-agent.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: a2a
+              containerPort: {{ .Values.config.a2aServerPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.config.metricsPort }}
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "xidr-agent.fullname" . }}-config
+            - secretRef:
+                name: {{ include "xidr-agent.fullname" . }}-secrets
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: {{ .Values.healthCheck.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthCheck.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthCheck.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthCheck.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: {{ .Values.healthCheck.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthCheck.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthCheck.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthCheck.readinessProbe.failureThreshold }}
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: {{ .Values.healthCheck.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthCheck.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.healthCheck.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.healthCheck.startupProbe.failureThreshold }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/xidr
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir:
+            sizeLimit: 100Mi
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.config.gracefulShutdownSeconds }}
