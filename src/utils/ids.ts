@@ -46,3 +46,31 @@ export function generateCheckpointId(leaseId: string): string {
 export function generateRequestId(): string {
   return `req_${uuidv4().slice(0, 12)}`;
 }
+
+/**
+ * Generate a generic prefixed ID.
+ */
+export function generateId(prefix: string): string {
+  return `${prefix}_${uuidv4().slice(0, 12)}`;
+}
+
+/**
+ * Generate a tenant ID.
+ */
+export function generateTenantId(): string {
+  return generateId("tenant");
+}
+
+/**
+ * Generate an organization ID.
+ */
+export function generateOrganizationId(): string {
+  return generateId("org");
+}
+
+/**
+ * Generate an API key ID.
+ */
+export function generateApiKeyId(): string {
+  return generateId("key");
+}

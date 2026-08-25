@@ -22,6 +22,8 @@ import { capacityRoutes } from "./routes/capacity.js";
 import { agentRoutes } from "./routes/agents.js";
 import { systemRoutes } from "./routes/system.js";
 import { tenantRoutes } from "./routes/tenants.js";
+import { approvalsRoutes, ruleSetRoutes } from "./routes/approvals.js";
+import installRoutes from "./routes/install.js";
 
 // Import middleware
 import { devAuthBypass, optionalAuthMiddleware, rateLimitMiddleware } from "../middleware/auth.js";
@@ -72,6 +74,9 @@ export function createApp() {
   app.route("/api/agents", agentRoutes);
   app.route("/api/system", systemRoutes);
   app.route("/api/tenants", tenantRoutes);
+  app.route("/api/rule-sets", ruleSetRoutes);
+  app.route("/api/approvals", approvalsRoutes);
+  app.route("/install", installRoutes);
 
   // 404 handler
   app.notFound((c) => {

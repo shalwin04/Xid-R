@@ -16,6 +16,7 @@ export interface GCPConfig {
   gkeGpuNodePool: string;
   checkpointBucket: string;
   firestoreDatabase: string;
+  credentialsPath: string | null;
 }
 
 export interface CapacityConfig {
@@ -81,13 +82,14 @@ export function createConfig(): Config {
     environment: getEnv("ENVIRONMENT", "development") as Config["environment"],
 
     gcp: {
-      projectId: getEnv("GCP_PROJECT_ID", "xidr-demo"),
+      projectId: getEnv("GCP_PROJECT_ID", "xid-r-development"),
       region: getEnv("GCP_REGION", "us-central1"),
       zone: getEnv("GCP_ZONE", "us-central1-a"),
       gkeClusterName: getEnv("GKE_CLUSTER_NAME", "xidr-cluster"),
       gkeGpuNodePool: getEnv("GKE_GPU_NODE_POOL", "gpu-pool"),
       checkpointBucket: getEnv("CHECKPOINT_BUCKET", "xidr-checkpoints"),
       firestoreDatabase: getEnv("FIRESTORE_DATABASE", "(default)"),
+      credentialsPath: getEnv("GOOGLE_APPLICATION_CREDENTIALS", "") || null,
     },
 
     capacity: {

@@ -3,6 +3,8 @@
  */
 
 import { Firestore } from "@google-cloud/firestore";
+import { existsSync } from "fs";
+import { resolve } from "path";
 import { getConfig } from "../config.js";
 import { createLogger } from "../utils/logger.js";
 
@@ -11,21 +13,62 @@ const logger = createLogger({ module: "firestore" });
 let db: Firestore | null = null;
 
 /**
+ * Find service account credentials file.
+ * Looks for credentials in order of priority:
+ * 1. GOOGLE_APPLICATION_CREDENTIALS env var
+ * 2. Service account JSON file in project root
+ */
+function findCredentialsPath(): string | undefined {
+  const config = getConfig();
+
+  // Check if explicitly set in config/env
+  if (config.gcp.credentialsPath && existsSync(config.gcp.credentialsPath)) {
+    return config.gcp.credentialsPath;
+  }
+
+  // Look for service account file in project root
+  const possiblePaths = [
+    resolve(process.cwd(), "xid-r-development-658e3df43415.json"),
+    resolve(process.cwd(), "service-account.json"),
+    resolve(process.cwd(), "credentials.json"),
+  ];
+
+  for (const path of possiblePaths) {
+    if (existsSync(path)) {
+      logger.info("Found credentials file", { path });
+      return path;
+    }
+  }
+
+  return undefined;
+}
+
+/**
  * Initialize Firestore client.
  */
 export function initFirestore(): Firestore {
   if (db) return db;
 
   const config = getConfig();
+  const credentialsPath = findCredentialsPath();
 
-  db = new Firestore({
+  const firestoreOptions: ConstructorParameters<typeof Firestore>[0] = {
     projectId: config.gcp.projectId,
     databaseId: config.gcp.firestoreDatabase,
-  });
+  };
+
+  // Add keyFilename if credentials file found
+  if (credentialsPath) {
+    firestoreOptions.keyFilename = credentialsPath;
+    logger.info("Using service account credentials", { path: credentialsPath });
+  }
+
+  db = new Firestore(firestoreOptions);
 
   logger.info("Firestore initialized", {
     projectId: config.gcp.projectId,
     database: config.gcp.firestoreDatabase,
+    hasCredentials: !!credentialsPath,
   });
 
   return db;
