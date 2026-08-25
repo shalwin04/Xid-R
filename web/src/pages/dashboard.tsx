@@ -162,13 +162,22 @@ export function DashboardPage() {
         <div>
           <h2 className="text-xl font-semibold text-foreground">Overview</h2>
         </div>
-        <Link
-          to="/dashboard/leases"
-          className="h-9 px-4 rounded-lg bg-foreground text-background text-sm font-medium flex items-center gap-2 hover:bg-foreground/90 transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Request
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/dashboard/metrics"
+            className="h-9 px-4 rounded-lg bg-muted text-foreground text-sm font-medium flex items-center gap-2 hover:bg-muted/80 transition-colors"
+          >
+            <TrendingUp className="w-4 h-4" />
+            Detailed Metrics
+          </Link>
+          <Link
+            to="/dashboard/leases"
+            className="h-9 px-4 rounded-lg bg-foreground text-background text-sm font-medium flex items-center gap-2 hover:bg-foreground/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            New Request
+          </Link>
+        </div>
       </div>
 
       {/* Error state */}

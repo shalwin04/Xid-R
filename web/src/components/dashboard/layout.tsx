@@ -8,12 +8,14 @@ import {
   Settings,
   Sun,
   Moon,
+  BarChart3,
 } from 'lucide-react';
 import { useTheme } from '@/contexts/theme-context';
 import { cn } from '@/lib/utils';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
+  { icon: BarChart3, label: 'Metrics', href: '/dashboard/metrics' },
   { icon: Server, label: 'Capacity', href: '/dashboard/capacity' },
   { icon: FileText, label: 'Leases', href: '/dashboard/leases' },
   { icon: MessageSquare, label: 'Explain', href: '/dashboard/explain' },

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from '@/contexts/theme-context';
 import LandingPage from '@/pages/landing';
 import DashboardPage from '@/pages/dashboard';
+import MetricsPage from '@/pages/metrics';
 import CapacityPage from '@/pages/capacity';
 import LeasesPage from '@/pages/leases';
 import ExplainPage from '@/pages/explain';
@@ -14,6 +15,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/dashboard/metrics" element={<MetricsPage />} />
           <Route path="/dashboard/capacity" element={<CapacityPage />} />
           <Route path="/dashboard/leases" element={<LeasesPage />} />
           <Route path="/dashboard/explain" element={<ExplainPage />} />
