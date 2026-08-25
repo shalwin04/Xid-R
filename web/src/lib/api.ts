@@ -221,6 +221,88 @@ export interface AuditEvent {
   decisionFactors: string[];
 }
 
+// ============================================================================
+// Onboarding Types
+// ============================================================================
+
+export type OnboardingStep =
+  | 'welcome'
+  | 'organization_details'
+  | 'deployment_model'
+  | 'connect_cloud'
+  | 'verify_permissions'
+  | 'discover_clusters'
+  | 'select_clusters'
+  | 'install_agent'
+  | 'verify_agent'
+  | 'configure_rules'
+  | 'generate_api_keys'
+  | 'complete';
+
+export interface OnboardingSession {
+  id: string;
+  email: string;
+  currentStep: OnboardingStep;
+  completedSteps: OnboardingStep[];
+  skippedSteps: OnboardingStep[];
+  organizationId?: string;
+  stepData: Record<string, unknown>;
+  lastError?: string;
+}
+
+export interface OnboardingStepConfig {
+  id: OnboardingStep;
+  title: string;
+  description: string;
+  required: boolean;
+  skippable: boolean;
+}
+
+export interface StartOnboardingResponse {
+  sessionId: string;
+  resumeToken: string;
+  currentStep: OnboardingStep;
+  message: string;
+}
+
+export interface ResumeOnboardingResponse {
+  sessionId: string;
+  currentStep: OnboardingStep;
+  completedSteps: OnboardingStep[];
+  stepData: Record<string, unknown>;
+  progress: number;
+}
+
+export interface StepResponse {
+  success: boolean;
+  nextStep: OnboardingStep | null;
+  progress: number;
+  [key: string]: unknown;
+}
+
+export interface DiscoveredCluster {
+  name: string;
+  location: string;
+  gpuNodePools: Array<{
+    name: string;
+    gpuType: string;
+    totalGpus: number;
+  }>;
+}
+
+export interface InstallCommand {
+  clusterName: string;
+  clusterId: string;
+  kubectlCommand: string;
+  helmCommand: string;
+}
+
+export interface AgentStatus {
+  installed: boolean;
+  healthy: boolean;
+  version?: string;
+}
+
 class ApiClient {
   private async request<T>(
     endpoint: string,
@@ -358,6 +440,152 @@ class ApiClient {
   // Health check
   async healthCheck(): Promise<{ status: string; version: string }> {
     return this.request('/health');
+  }
+
+  // ============================================================================
+  // Onboarding API
+  // ============================================================================
+
+  async startOnboarding(email: string, source?: string): Promise<StartOnboardingResponse> {
+    return this.request(`${API_BASE}/onboarding/start`, {
+      method: 'POST',
+      body: JSON.stringify({ email, source }),
+    });
+  }
+
+  async resumeOnboarding(resumeToken: string): Promise<ResumeOnboardingResponse> {
+    return this.request(`${API_BASE}/onboarding/resume`, {
+      method: 'POST',
+      body: JSON.stringify({ resumeToken }),
+    });
+  }
+
+  async getOnboardingSession(sessionId: string): Promise<{
+    session: OnboardingSession;
+    currentStepConfig: OnboardingStepConfig;
+    progress: number;
+    canSkip: boolean;
+  }> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}`);
+  }
+
+  async getOnboardingStepConfigs(): Promise<{
+    steps: OnboardingStepConfig[];
+    requiredPermissions: string[];
+  }> {
+    return this.request(`${API_BASE}/onboarding/config/steps`);
+  }
+
+  async submitWelcomeStep(sessionId: string, data: { acknowledged: boolean }): Promise<StepResponse> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/welcome`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async submitOrganizationStep(sessionId: string, data: {
+    name: string;
+    domain?: string;
+    billingEmail: string;
+    plan?: 'free' | 'pro' | 'enterprise';
+  }): Promise<StepResponse & { organizationId: string }> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/organization_details`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async submitDeploymentModelStep(sessionId: string, data: {
+    deploymentModel: 'saas' | 'hybrid' | 'self_hosted';
+  }): Promise<StepResponse> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/deployment_model`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async submitConnectCloudStep(sessionId: string, data: {
+    projectId: string;
+    connectionMethod: 'service_account' | 'workload_identity';
+    serviceAccountEmail?: string;
+    credentials?: string;
+  }): Promise<StepResponse & { connectionId: string }> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/connect_cloud`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async verifyPermissions(sessionId: string): Promise<StepResponse & {
+    permissionResults: Record<string, boolean>;
+    errors: string[];
+  }> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/verify_permissions`, {
+      method: 'POST',
+    });
+  }
+
+  async discoverClusters(sessionId: string): Promise<StepResponse & {
+    clusters: DiscoveredCluster[];
+  }> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/discover_clusters`, {
+      method: 'POST',
+    });
+  }
+
+  async selectClusters(sessionId: string, data: {
+    selectedClusterNames: string[];
+  }): Promise<StepResponse & { clusters: unknown[] }> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/select_clusters`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getInstallCommands(sessionId: string): Promise<StepResponse & {
+    installCommands: InstallCommand[];
+  }> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/install_agent`, {
+      method: 'POST',
+    });
+  }
+
+  async verifyAgents(sessionId: string): Promise<StepResponse & {
+    agentStatuses: Record<string, AgentStatus>;
+    allVerified: boolean;
+  }> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/verify_agent`, {
+      method: 'POST',
+    });
+  }
+
+  async configureRules(sessionId: string, data: {
+    useDefaultRules: boolean;
+    customRules?: unknown[];
+  }): Promise<StepResponse & { ruleSetId: string }> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/configure_rules`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async generateApiKeys(sessionId: string, data: {
+    keyName: string;
+  }): Promise<StepResponse & {
+    apiKey: { id: string; key: string; name: string; prefix: string };
+    tenantId: string;
+    message: string;
+  }> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/generate_api_keys`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async skipOnboardingStep(sessionId: string, stepName: OnboardingStep): Promise<StepResponse> {
+    return this.request(`${API_BASE}/onboarding/${sessionId}/steps/${stepName}/skip`, {
+      method: 'POST',
+    });
   }
 }
 

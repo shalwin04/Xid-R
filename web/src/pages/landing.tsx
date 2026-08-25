@@ -14,12 +14,12 @@ export function LandingPage() {
         title="Every Idle Cycle,"
         titleLine2="Checkpointed"
         description="Xid-R harvests idle GPU capacity and brokers it to AI agents. MCP tools for requests, A2A protocol for checkpoint negotiation. Full explainability for every decision."
-        primaryButtonText="Launch Dashboard"
-        primaryButtonHref="/dashboard"
-        secondaryButtonText="Watch Demo"
-        secondaryButtonHref="#demo"
-        ctaButtonText="Get Started"
-        ctaButtonHref="/dashboard"
+        primaryButtonText="Get Started"
+        primaryButtonHref="/onboarding"
+        secondaryButtonText="View Dashboard"
+        secondaryButtonHref="/dashboard"
+        ctaButtonText="Start Free"
+        ctaButtonHref="/onboarding"
         partnersTitle="Built with industry-leading technologies"
         partners={[
           { name: "Google Cloud", href: "#" },
