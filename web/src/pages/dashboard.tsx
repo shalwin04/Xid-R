@@ -23,6 +23,7 @@ import {
   Database,
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/layout';
+import { Chatbot } from '@/components/dashboard/chatbot';
 import { useDashboard } from '@/hooks';
 import { cn, timeAgo } from '@/lib/utils';
 
@@ -760,6 +761,11 @@ export function DashboardPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Floating AI Chatbot */}
+      <div className="fixed bottom-6 right-6 w-96 z-40">
+        <Chatbot />
       </div>
     </DashboardLayout>
   );

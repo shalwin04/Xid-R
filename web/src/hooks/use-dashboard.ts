@@ -204,10 +204,10 @@ export function useDashboard() {
   // Connect to WebSocket for real-time updates
   const connectWebSocket = useCallback(() => {
     // Determine WebSocket URL
-    // In development (port 3000), connect directly to backend on port 8080
+    // In development, connect to the backend port (8080)
     // In production, use same host (assumes reverse proxy handles both)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const isDev = window.location.port === '3000';
+    const isDev = window.location.port === '3000' || window.location.port === '3002';
     const wsHost = isDev ? `${window.location.hostname}:8080` : window.location.host;
     const wsUrl = `${protocol}//${wsHost}`;
 

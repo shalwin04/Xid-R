@@ -2,8 +2,25 @@
  * API client for Xid-R backend
  */
 
-const API_BASE = '/api';
-const MCP_BASE = '/mcp/tools';
+// In development, use direct API URL. In production, use relative paths.
+const getApiBase = () => {
+  // Check for environment variable (set during build)
+  const envUrl = (import.meta as { env?: { VITE_API_URL?: string; DEV?: boolean } }).env?.VITE_API_URL;
+  if (envUrl) return envUrl;
+
+  // In development mode, use direct backend URL
+  if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV && typeof window !== 'undefined') {
+    const currentHost = window.location.hostname;
+    return `http://${currentHost}:8080`;
+  }
+
+  // Default to relative paths (works with proxy or same-origin deployment)
+  return '';
+};
+
+const API_BASE_URL = getApiBase();
+const API_BASE = `${API_BASE_URL}/api`;
+const MCP_BASE = `${API_BASE_URL}/mcp/tools`;
 
 export interface LeaseRequest {
   gpu_type: string;
@@ -439,7 +456,7 @@ class ApiClient {
 
   // Health check
   async healthCheck(): Promise<{ status: string; version: string }> {
-    return this.request('/health');
+    return this.request(`${API_BASE_URL}/health`);
   }
 
   // ============================================================================
@@ -586,6 +603,90 @@ class ApiClient {
     return this.request(`${API_BASE}/onboarding/${sessionId}/steps/${stepName}/skip`, {
       method: 'POST',
     });
+  }
+
+  // ============================================================================
+  // Chat API (LLM-Powered Assistant)
+  // ============================================================================
+
+  async chatMessage(message: string, sessionId?: string): Promise<{
+    success: boolean;
+    response: string;
+    function_calls?: string[];
+  }> {
+    return this.request(`${API_BASE}/chat/message`, {
+      method: 'POST',
+      body: JSON.stringify({ message, session_id: sessionId }),
+    });
+  }
+
+  async clearChat(): Promise<{ success: boolean; message: string }> {
+    return this.request(`${API_BASE}/chat/clear`, {
+      method: 'POST',
+    });
+  }
+
+  async getChatHistory(): Promise<{
+    history: Array<{ role: 'user' | 'assistant'; content: string }>;
+  }> {
+    return this.request(`${API_BASE}/chat/history`);
+  }
+
+  async explainLease(leaseId: string): Promise<{
+    lease_id: string;
+    current_status: string;
+    agent_id: string;
+    gpu_type: string;
+    timeline: Array<{
+      timestamp: string;
+      event: string;
+      reasoning: string;
+      factors: string[];
+      source: string;
+      llm_powered: boolean;
+    }>;
+    key_decisions: Array<{
+      event: string;
+      reasoning: string;
+      factors: string[];
+    }>;
+    summary: string;
+  }> {
+    return this.request(`${API_BASE}/chat/explain/lease/${leaseId}`);
+  }
+
+  async askAboutLease(leaseId: string, question: string): Promise<{
+    lease_id: string;
+    question: string;
+    explanation: string;
+    sources?: string[];
+  }> {
+    return this.request(`${API_BASE}/chat/explain/ask`, {
+      method: 'POST',
+      body: JSON.stringify({ lease_id: leaseId, question }),
+    });
+  }
+
+  async getRecentExplain(limit?: number): Promise<{
+    recent_activity: Array<{
+      lease_id: string;
+      latest_event: string;
+      latest_reasoning: string;
+      event_count: number;
+      timestamp: string;
+      llm_powered: boolean;
+    }>;
+    total_events: number;
+    events: Array<{
+      id: string;
+      type: string;
+      lease_id: string;
+      reasoning: string;
+      timestamp: string;
+      llm_powered: boolean;
+    }>;
+  }> {
+    return this.request(`${API_BASE}/chat/explain/recent?limit=${limit || 20}`);
   }
 }
 

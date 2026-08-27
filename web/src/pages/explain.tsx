@@ -6,9 +6,13 @@ import {
   Lightbulb,
   Clock,
   ChevronDown,
+  Sparkles,
+  Bot,
+  Send,
 } from 'lucide-react';
 import { DashboardLayout } from '@/components/dashboard/layout';
 import { useExplain } from '@/hooks';
+import { cn } from '@/lib/utils';
 
 const eventTypes = [
   { value: '', label: 'Any Event' },
@@ -22,7 +26,9 @@ export function ExplainPage() {
   const [searchParams] = useSearchParams();
   const [leaseId, setLeaseId] = useState(searchParams.get('lease') || '');
   const [eventType, setEventType] = useState('');
-  const { explanation, explain, loading, error } = useExplain();
+  const [question, setQuestion] = useState('');
+  const [askResponse, setAskResponse] = useState<string | null>(null);
+  const { explanation, leaseExplanation, explain, askAboutLease, loading, error } = useExplain();
 
   useEffect(() => {
     const urlLeaseId = searchParams.get('lease');
@@ -104,6 +110,60 @@ export function ExplainPage() {
           </div>
         )}
 
+        {/* Ask AI Section */}
+        {explanation && (
+          <div className="rounded-xl border border-border bg-gradient-to-r from-purple-500/5 to-cyan-500/5 mb-6">
+            <div className="px-5 py-4 border-b border-border flex items-center gap-2">
+              <Bot className="w-5 h-5 text-purple-500" />
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <h2 className="font-semibold text-foreground">Ask AI About This Lease</h2>
+            </div>
+            <div className="p-5">
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  placeholder="Why was this lease evicted? What factors influenced the decision?"
+                  className="flex-1 h-10 px-4 rounded-lg bg-muted border-0 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                  onKeyDown={async (e) => {
+                    if (e.key === 'Enter' && question && leaseId) {
+                      try {
+                        const result = await askAboutLease(leaseId, question);
+                        setAskResponse(result.explanation);
+                      } catch (err) {
+                        console.error(err);
+                      }
+                    }
+                  }}
+                />
+                <button
+                  onClick={async () => {
+                    if (question && leaseId) {
+                      try {
+                        const result = await askAboutLease(leaseId, question);
+                        setAskResponse(result.explanation);
+                      } catch (err) {
+                        console.error(err);
+                      }
+                    }
+                  }}
+                  disabled={!question || loading}
+                  className="h-10 px-4 rounded-lg bg-gradient-to-r from-purple-500 to-cyan-500 text-white text-sm font-medium hover:from-purple-600 hover:to-cyan-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
+                  Ask
+                </button>
+              </div>
+              {askResponse && (
+                <div className="mt-4 p-4 rounded-lg bg-muted">
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{askResponse}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Explanation Result */}
         {explanation && (
           <div className="space-y-6">
@@ -113,6 +173,12 @@ export function ExplainPage() {
                 <div className="flex items-center gap-2">
                   <Lightbulb className="w-5 h-5 text-amber-500" />
                   <h2 className="font-semibold text-foreground">Explanation</h2>
+                  {leaseExplanation?.timeline.some((t: { llm_powered: boolean }) => t.llm_powered) && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-purple-500/10 to-cyan-500/10 text-xs text-purple-600 dark:text-purple-400">
+                      <Sparkles className="w-3 h-3" />
+                      AI-Powered
+                    </span>
+                  )}
                 </div>
                 <span className="px-2.5 py-1 rounded-full bg-muted text-xs font-medium text-foreground capitalize">
                   {explanation.lease_status}
@@ -152,20 +218,31 @@ export function ExplainPage() {
                   <div className="relative">
                     <div className="absolute left-4 top-0 bottom-0 w-px bg-border" />
                     <div className="space-y-6">
-                      {explanation.timeline.map((item, i) => (
-                        <div key={i} className="relative pl-10">
-                          <div className="absolute left-2.5 top-1.5 w-3 h-3 rounded-full bg-foreground border-2 border-background" />
-                          <div className="p-4 rounded-lg bg-muted">
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium text-foreground">{item.event}</span>
-                              <span className="text-xs text-muted-foreground">
-                                {formatTimestamp(item.timestamp)}
-                              </span>
+                      {explanation.timeline.map((item, i) => {
+                        const llmPowered = leaseExplanation?.timeline[i]?.llm_powered;
+                        return (
+                          <div key={i} className="relative pl-10">
+                            <div className={cn(
+                              "absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 border-background",
+                              llmPowered ? "bg-gradient-to-r from-purple-500 to-cyan-500" : "bg-foreground"
+                            )} />
+                            <div className="p-4 rounded-lg bg-muted">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-foreground">{item.event}</span>
+                                  {llmPowered && (
+                                    <Sparkles className="w-3 h-3 text-purple-500" />
+                                  )}
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  {formatTimestamp(item.timestamp)}
+                                </span>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{item.details}</p>
                             </div>
-                            <p className="text-sm text-muted-foreground">{item.details}</p>
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>

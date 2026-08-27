@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import api, { Lease, LeaseRequest, LeaseResponse, ReleaseResponse, ExplainResponse } from '@/lib/api';
+import api, { Lease, LeaseRequest, LeaseResponse, ReleaseResponse } from '@/lib/api';
 
 export function useLeases(initialStatus?: string) {
   const [leases, setLeases] = useState<Lease[]>([]);
@@ -96,25 +96,4 @@ export function useReleaseLease() {
   return { releaseLease, loading, error };
 }
 
-export function useExplain() {
-  const [explanation, setExplanation] = useState<ExplainResponse | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const explain = useCallback(async (leaseId: string, eventType?: string): Promise<ExplainResponse | null> => {
-    try {
-      setLoading(true);
-      setError(null);
-      const response = await api.explain(leaseId, eventType);
-      setExplanation(response);
-      return response;
-    } catch (err) {
-      setError((err as Error).message);
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  return { explanation, explain, loading, error };
-}
+// NOTE: useExplain has been moved to use-explain.ts with LLM-powered features
