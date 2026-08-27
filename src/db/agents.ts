@@ -58,9 +58,15 @@ export async function updateAgentCard(
 ): Promise<AgentCard | null> {
   const ref = getCollection(Collections.AGENT_CARDS).doc(id);
 
-  await ref.update({
-    ...updates,
-  });
+  // Filter out undefined values (Firestore doesn't accept them)
+  const cleanedUpdates: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(updates)) {
+    if (value !== undefined) {
+      cleanedUpdates[key] = value;
+    }
+  }
+
+  await ref.update(cleanedUpdates);
 
   const doc = await ref.get();
   if (!doc.exists) return null;

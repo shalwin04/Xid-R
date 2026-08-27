@@ -93,30 +93,37 @@ export async function getOnboardingSessionByToken(resumeToken: string): Promise<
 
 /**
  * Get onboarding session by email (most recent incomplete).
+ * Simplified query to avoid composite index requirement.
  */
 export async function getOnboardingSessionByEmail(email: string): Promise<OnboardingSession | null> {
   const db = getFirestore();
+
+  // Simple query by email, then filter in memory
   const snapshot = await db
     .collection(SESSIONS_COLLECTION)
     .where("email", "==", email)
-    .where("completedAt", "==", null)
-    .orderBy("lastActivityAt", "desc")
-    .limit(1)
     .get();
 
   if (snapshot.empty) {
     return null;
   }
 
-  const doc = snapshot.docs[0];
-  const data = doc.data();
-  return {
-    ...data,
-    id: doc.id,
-    startedAt: data.startedAt?.toDate() || new Date(),
-    lastActivityAt: data.lastActivityAt?.toDate() || new Date(),
-    completedAt: data.completedAt?.toDate(),
-  } as OnboardingSession;
+  // Filter for incomplete sessions and sort by lastActivityAt
+  const incompleteSessions = snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        ...data,
+        id: doc.id,
+        startedAt: data.startedAt?.toDate() || new Date(),
+        lastActivityAt: data.lastActivityAt?.toDate() || new Date(),
+        completedAt: data.completedAt?.toDate(),
+      } as OnboardingSession;
+    })
+    .filter((session) => !session.completedAt)
+    .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
+
+  return incompleteSessions[0] || null;
 }
 
 /**
@@ -127,10 +134,16 @@ export async function updateOnboardingSession(
   updates: Partial<Omit<OnboardingSession, "id" | "startedAt" | "resumeToken">>
 ): Promise<void> {
   const db = getFirestore();
-  await db.collection(SESSIONS_COLLECTION).doc(id).update({
-    ...updates,
-    lastActivityAt: new Date(),
-  });
+
+  // Filter out undefined values (Firestore doesn't accept them)
+  const cleanedUpdates: Record<string, unknown> = { lastActivityAt: new Date() };
+  for (const [key, value] of Object.entries(updates)) {
+    if (value !== undefined) {
+      cleanedUpdates[key] = value;
+    }
+  }
+
+  await db.collection(SESSIONS_COLLECTION).doc(id).update(cleanedUpdates);
   log.debug("Updated onboarding session", { id });
 }
 
@@ -162,14 +175,13 @@ export async function completeOnboardingStep(
   // Get next step
   const nextStep = getNextStep(step);
 
-  // Prepare updates
+  // Prepare updates (note: undefined values are filtered in updateOnboardingSession)
   const updates: Partial<OnboardingSession> = {
     currentStep: nextStep || OnboardingStep.COMPLETE,
     completedSteps,
     stepData: mergedStepData,
     lastActivityAt: new Date(),
     errorCount: 0,
-    lastError: undefined,
   };
 
   // Mark as completed if on last step
@@ -255,26 +267,29 @@ export async function deleteOnboardingSession(id: string): Promise<void> {
 
 /**
  * List incomplete sessions older than X days (for cleanup).
+ * Simplified query to avoid composite index requirement.
  */
 export async function findStaleSessions(staleDays = 7): Promise<OnboardingSession[]> {
   const db = getFirestore();
   const staleThreshold = new Date(Date.now() - staleDays * 24 * 60 * 60 * 1000);
 
+  // Simple query, then filter in memory
   const snapshot = await db
     .collection(SESSIONS_COLLECTION)
-    .where("completedAt", "==", null)
-    .where("lastActivityAt", "<", staleThreshold)
     .get();
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      ...data,
-      id: doc.id,
-      startedAt: data.startedAt?.toDate() || new Date(),
-      lastActivityAt: data.lastActivityAt?.toDate() || new Date(),
-    } as OnboardingSession;
-  });
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        ...data,
+        id: doc.id,
+        startedAt: data.startedAt?.toDate() || new Date(),
+        lastActivityAt: data.lastActivityAt?.toDate() || new Date(),
+        completedAt: data.completedAt?.toDate(),
+      } as OnboardingSession;
+    })
+    .filter((session) => !session.completedAt && session.lastActivityAt < staleThreshold);
 }
 
 /**

@@ -5,12 +5,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
 
-import { getLeaseStats } from "../../db/leases.js";
-import { getCapacitySummary } from "../../db/capacity.js";
-import { getCheckpointStats } from "../../db/checkpoints.js";
+import { getLeaseStats, getLeasesByTenant, getCostAnalytics } from "../../db/leases.js";
+import { getCapacitySummary, getGpuUtilization, getGkeNodeStatus } from "../../db/capacity.js";
+import { getCheckpointStats, getCheckpointAnalytics } from "../../db/checkpoints.js";
 import { getRecentAuditEvents } from "../../db/audit.js";
 import { getConfig } from "../../config.js";
 import { getPreemptionListener } from "../../capacity/preemption-listener.js";
+import { getTenant } from "../../db/tenants.js";
 
 export const systemRoutes = new Hono();
 
@@ -73,12 +74,51 @@ systemRoutes.get("/config", (c) => {
 
 // Get dashboard data (aggregated for real-time display)
 systemRoutes.get("/dashboard", async (c) => {
-  const [leaseStats, capacitySummary, checkpointStats, recentEvents] = await Promise.all([
+  const [
+    leaseStats,
+    capacitySummary,
+    checkpointStats,
+    checkpointAnalytics,
+    recentEvents,
+    gpuUtilization,
+    gkeNodes,
+    tenantBreakdown,
+    costAnalytics,
+  ] = await Promise.all([
     getLeaseStats(),
     getCapacitySummary(),
     getCheckpointStats(),
+    getCheckpointAnalytics(),
     getRecentAuditEvents(10),
+    getGpuUtilization(),
+    getGkeNodeStatus(),
+    getLeasesByTenant(),
+    getCostAnalytics(),
   ]);
+
+  // Enrich tenant breakdown with names
+  const enrichedTenantBreakdown = await Promise.all(
+    tenantBreakdown.slice(0, 10).map(async (t) => {
+      try {
+        const tenant = await getTenant(t.tenantId);
+        return {
+          tenantId: t.tenantId,
+          tenantName: tenant?.name || t.tenantId,
+          activeLeases: t.activeLeases,
+          totalLeases: t.totalLeases,
+          totalSavingsUsd: t.totalSavingsUsd,
+        };
+      } catch {
+        return {
+          tenantId: t.tenantId,
+          tenantName: t.tenantId,
+          activeLeases: t.activeLeases,
+          totalLeases: t.totalLeases,
+          totalSavingsUsd: t.totalSavingsUsd,
+        };
+      }
+    })
+  );
 
   return c.json({
     stats: {
@@ -98,6 +138,30 @@ systemRoutes.get("/dashboard", async (c) => {
       timestamp: e.timestamp.toISOString(),
       summary: e.reasoning ?? e.eventType.replace(/_/g, " "),
     })),
+    gpuUtilization,
+    gkeNodes,
+    tenantBreakdown: enrichedTenantBreakdown,
+    costAnalytics: {
+      hourly: costAnalytics.hourly,
+      daily: costAnalytics.daily,
+      totalBaselineCostUsd: costAnalytics.totalBaselineCostUsd,
+      totalActualCostUsd: costAnalytics.totalActualCostUsd,
+      totalSavingsUsd: costAnalytics.totalSavingsUsd,
+      savingsPercent:
+        costAnalytics.totalBaselineCostUsd > 0
+          ? (costAnalytics.totalSavingsUsd / costAnalytics.totalBaselineCostUsd) * 100
+          : 0,
+    },
+    checkpointAnalytics: {
+      total: checkpointAnalytics.total,
+      complete: checkpointAnalytics.complete,
+      restored: checkpointAnalytics.restored,
+      failed: checkpointAnalytics.failed,
+      successRate: checkpointAnalytics.successRate,
+      avgSizeBytes: checkpointAnalytics.avgSizeBytes,
+      avgDurationMs: checkpointAnalytics.avgDurationMs,
+      recentCheckpoints: checkpointAnalytics.recentCheckpoints,
+    },
     updated_at: new Date().toISOString(),
   });
 });

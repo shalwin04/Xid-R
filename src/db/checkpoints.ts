@@ -59,16 +59,20 @@ export async function getCheckpointsForLease(leaseId: string): Promise<Checkpoin
  * Get the latest checkpoint for a lease.
  */
 export async function getLatestCheckpoint(leaseId: string): Promise<Checkpoint | null> {
+  // Query by leaseId only to avoid composite index requirement
   const snapshot = await getCollection(Collections.CHECKPOINTS)
     .where("leaseId", "==", leaseId)
-    .where("status", "==", CheckpointStatus.COMPLETE)
-    .orderBy("createdAt", "desc")
-    .limit(1)
     .get();
 
   if (snapshot.empty) return null;
-  const doc = snapshot.docs[0];
-  return checkpointFromFirestore(doc.id, doc.data() as Record<string, unknown>);
+
+  // Filter and sort in memory
+  const checkpoints = snapshot.docs
+    .map((doc) => checkpointFromFirestore(doc.id, doc.data() as Record<string, unknown>))
+    .filter((cp) => cp.status === CheckpointStatus.COMPLETE)
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+  return checkpoints.length > 0 ? checkpoints[0] : null;
 }
 
 /**
@@ -129,24 +133,33 @@ export async function getCheckpointsForAgent(agentId: string): Promise<Checkpoin
  */
 export async function cleanupExpiredCheckpoints(): Promise<number> {
   const now = new Date();
+  // Query by status only to avoid composite index requirement
   const snapshot = await getCollection(Collections.CHECKPOINTS)
-    .where("expiresAt", "<", now)
     .where("status", "==", CheckpointStatus.COMPLETE)
     .get();
 
+  // Filter expired in memory
+  const expiredDocs = snapshot.docs.filter((doc) => {
+    const data = doc.data();
+    const expiresAt = data.expiresAt?.toDate?.() ?? new Date(data.expiresAt as string);
+    return expiresAt < now;
+  });
+
+  if (expiredDocs.length === 0) {
+    return 0;
+  }
+
   const batch = getCollection(Collections.CHECKPOINTS).firestore.batch();
 
-  for (const doc of snapshot.docs) {
+  for (const doc of expiredDocs) {
     batch.update(doc.ref, { status: CheckpointStatus.EXPIRED });
   }
 
   await batch.commit();
 
-  if (snapshot.docs.length > 0) {
-    logger.info("Expired checkpoints", { count: snapshot.docs.length });
-  }
+  logger.info("Expired checkpoints", { count: expiredDocs.length });
 
-  return snapshot.docs.length;
+  return expiredDocs.length;
 }
 
 /**

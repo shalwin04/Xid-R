@@ -96,29 +96,31 @@ export async function getCloudConnection(id: string): Promise<CloudConnection | 
 
 /**
  * List cloud connections for an organization.
+ * Simplified query to avoid composite index requirement.
  */
 export async function listCloudConnections(organizationId: string): Promise<CloudConnection[]> {
   const db = getFirestore();
   const snapshot = await db
     .collection(CONNECTIONS_COLLECTION)
     .where("organizationId", "==", organizationId)
-    .orderBy("createdAt", "desc")
     .get();
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      ...data,
-      id: doc.id,
-      createdAt: data.createdAt?.toDate() || new Date(),
-      updatedAt: data.updatedAt?.toDate() || new Date(),
-      lastHealthCheck: data.lastHealthCheck?.toDate(),
-      permissionsVerified: {
-        ...data.permissionsVerified,
-        verifiedAt: data.permissionsVerified?.verifiedAt?.toDate(),
-      },
-    } as CloudConnection;
-  });
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        ...data,
+        id: doc.id,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+        lastHealthCheck: data.lastHealthCheck?.toDate(),
+        permissionsVerified: {
+          ...data.permissionsVerified,
+          verifiedAt: data.permissionsVerified?.verifiedAt?.toDate(),
+        },
+      } as CloudConnection;
+    })
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 /**
@@ -217,7 +219,7 @@ export async function createManagedCluster(data: {
     name: data.name,
     location: data.location,
     clusterType: data.clusterType,
-    endpoint: data.endpoint,
+    endpoint: data.endpoint || undefined,
     managementStatus: ClusterManagementStatus.DISCOVERED,
     agent: createDefaultAgentInfo(),
     gpuInventory: createDefaultGpuInventory(),
@@ -225,15 +227,15 @@ export async function createManagedCluster(data: {
     updatedAt: new Date(),
   };
 
-  await db.collection(CLUSTERS_COLLECTION).doc(id).set({
-    ...cluster,
-    createdAt: cluster.createdAt,
-    updatedAt: cluster.updatedAt,
-    gpuInventory: {
-      ...cluster.gpuInventory,
-      lastScanAt: cluster.gpuInventory.lastScanAt,
-    },
-  });
+  // Filter out undefined values before saving to Firestore
+  const clusterData: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(cluster)) {
+    if (value !== undefined) {
+      clusterData[key] = value;
+    }
+  }
+
+  await db.collection(CLUSTERS_COLLECTION).doc(id).set(clusterData);
 
   log.info("Created managed cluster", { id, name: data.name });
   return cluster;
@@ -306,62 +308,66 @@ export async function getManagedClusterByName(
 
 /**
  * List managed clusters for a cloud connection.
+ * Simplified query to avoid composite index requirement.
  */
 export async function listManagedClusters(cloudConnectionId: string): Promise<ManagedCluster[]> {
   const db = getFirestore();
   const snapshot = await db
     .collection(CLUSTERS_COLLECTION)
     .where("cloudConnectionId", "==", cloudConnectionId)
-    .orderBy("createdAt", "desc")
     .get();
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      ...data,
-      id: doc.id,
-      createdAt: data.createdAt?.toDate() || new Date(),
-      updatedAt: data.updatedAt?.toDate() || new Date(),
-      agent: {
-        ...data.agent,
-        lastHeartbeat: data.agent?.lastHeartbeat?.toDate(),
-      },
-      gpuInventory: {
-        ...data.gpuInventory,
-        lastScanAt: data.gpuInventory?.lastScanAt?.toDate() || new Date(),
-      },
-    } as ManagedCluster;
-  });
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        ...data,
+        id: doc.id,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+        agent: {
+          ...data.agent,
+          lastHeartbeat: data.agent?.lastHeartbeat?.toDate(),
+        },
+        gpuInventory: {
+          ...data.gpuInventory,
+          lastScanAt: data.gpuInventory?.lastScanAt?.toDate() || new Date(),
+        },
+      } as ManagedCluster;
+    })
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 /**
  * List all managed clusters for an organization.
+ * Simplified query to avoid composite index requirement.
  */
 export async function listOrganizationClusters(organizationId: string): Promise<ManagedCluster[]> {
   const db = getFirestore();
   const snapshot = await db
     .collection(CLUSTERS_COLLECTION)
     .where("organizationId", "==", organizationId)
-    .orderBy("createdAt", "desc")
     .get();
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      ...data,
-      id: doc.id,
-      createdAt: data.createdAt?.toDate() || new Date(),
-      updatedAt: data.updatedAt?.toDate() || new Date(),
-      agent: {
-        ...data.agent,
-        lastHeartbeat: data.agent?.lastHeartbeat?.toDate(),
-      },
-      gpuInventory: {
-        ...data.gpuInventory,
-        lastScanAt: data.gpuInventory?.lastScanAt?.toDate() || new Date(),
-      },
-    } as ManagedCluster;
-  });
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        ...data,
+        id: doc.id,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+        agent: {
+          ...data.agent,
+          lastHeartbeat: data.agent?.lastHeartbeat?.toDate(),
+        },
+        gpuInventory: {
+          ...data.gpuInventory,
+          lastScanAt: data.gpuInventory?.lastScanAt?.toDate() || new Date(),
+        },
+      } as ManagedCluster;
+    })
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 }
 
 /**
@@ -464,24 +470,26 @@ export async function recordAgentHeartbeat(data: {
 
 /**
  * Get recent heartbeats for a cluster.
+ * Simplified query to avoid composite index requirement.
  */
 export async function getRecentHeartbeats(clusterId: string, limit = 10): Promise<AgentHeartbeat[]> {
   const db = getFirestore();
   const snapshot = await db
     .collection(HEARTBEATS_COLLECTION)
     .where("clusterId", "==", clusterId)
-    .orderBy("timestamp", "desc")
-    .limit(limit)
     .get();
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      ...data,
-      id: doc.id,
-      timestamp: data.timestamp?.toDate() || new Date(),
-    } as AgentHeartbeat;
-  });
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        ...data,
+        id: doc.id,
+        timestamp: data.timestamp?.toDate() || new Date(),
+      } as AgentHeartbeat;
+    })
+    .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+    .slice(0, limit);
 }
 
 /**

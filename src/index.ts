@@ -28,6 +28,7 @@ import { systemRoutes } from "./api/routes/system.js";
 import { tenantRoutes } from "./api/routes/tenants.js";
 import { onboardingRoutes } from "./api/routes/onboarding.js";
 import { approvalsRoutes, ruleSetRoutes } from "./api/routes/approvals.js";
+import { chatRoutes } from "./api/routes/chat.js";
 
 // Import middleware
 import { devAuthBypass, optionalAuthMiddleware, rateLimitMiddleware } from "./middleware/auth.js";
@@ -454,6 +455,9 @@ export function createApp(wsManager: WebSocketManager) {
   app.route("/api/onboarding", onboardingRoutes);
   app.route("/api/rule-sets", ruleSetRoutes);
   app.route("/api/approvals", approvalsRoutes);
+
+  // Chat routes (LLM-powered assistant)
+  app.route("/api/chat", chatRoutes);
 
   // 404 handler
   app.notFound((c) => {

@@ -48,6 +48,12 @@ export interface DashboardConfig {
   wsPort: number;
 }
 
+export interface GeminiConfig {
+  apiKey: string | null;
+  model: string;
+  temperature: number;
+}
+
 export interface Config {
   environment: "development" | "staging" | "production";
   gcp: GCPConfig;
@@ -55,6 +61,7 @@ export interface Config {
   negotiation: NegotiationConfig;
   api: APIConfig;
   dashboard: DashboardConfig;
+  gemini: GeminiConfig;
   gainSharePercent: number;
 }
 
@@ -119,7 +126,11 @@ export function createConfig(): Config {
       debug: getEnvBool("DEBUG", false),
       corsOrigins: [
         "http://localhost:3000",
+        "http://localhost:3001",
         "http://localhost:8080",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:8080",
         "https://*.run.app",
       ],
     },
@@ -131,6 +142,12 @@ export function createConfig(): Config {
       ),
       updateIntervalMs: 1000,
       wsPort: getEnvNumber("DASHBOARD_WS_PORT", 8081),
+    },
+
+    gemini: {
+      apiKey: getEnv("GOOGLE_API_KEY", "") || null,
+      model: getEnv("GEMINI_MODEL", "gemini-1.5-flash"),
+      temperature: getEnvFloat("GEMINI_TEMPERATURE", 0.7),
     },
 
     gainSharePercent: getEnvFloat("GAIN_SHARE_PERCENT", 15.0),

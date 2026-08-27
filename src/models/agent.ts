@@ -47,9 +47,9 @@ export interface RegisterAgentInput {
 /**
  * Create an agent card from registration input.
  */
-export function createAgentCard(input: RegisterAgentInput): AgentCard {
+export function createAgentCard(input: RegisterAgentInput): Omit<AgentCard, "ownerEmail"> & { ownerEmail?: string } {
   const now = new Date();
-  return {
+  const card: Omit<AgentCard, "ownerEmail"> & { ownerEmail?: string } = {
     id: input.id,
     name: input.name,
     description: input.description ?? "",
@@ -59,10 +59,16 @@ export function createAgentCard(input: RegisterAgentInput): AgentCard {
     estimatedCheckpointSizeBytes: input.estimatedCheckpointSizeBytes ?? 0,
     observedCheckpointDurationMs: null,
     trustTier: input.trustTier ?? "external",
-    ownerEmail: input.ownerEmail,
     registeredAt: now,
     lastSeenAt: now,
   };
+
+  // Only include ownerEmail if provided (Firestore doesn't accept undefined)
+  if (input.ownerEmail !== undefined) {
+    card.ownerEmail = input.ownerEmail;
+  }
+
+  return card;
 }
 
 /**

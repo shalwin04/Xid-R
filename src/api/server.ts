@@ -24,6 +24,8 @@ import { systemRoutes } from "./routes/system.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { approvalsRoutes, ruleSetRoutes } from "./routes/approvals.js";
 import installRoutes from "./routes/install.js";
+import { onboardingRoutes } from "./routes/onboarding.js";
+import { chatRoutes } from "./routes/chat.js";
 
 // Import middleware
 import { devAuthBypass, optionalAuthMiddleware, rateLimitMiddleware } from "../middleware/auth.js";
@@ -76,6 +78,8 @@ export function createApp() {
   app.route("/api/tenants", tenantRoutes);
   app.route("/api/rule-sets", ruleSetRoutes);
   app.route("/api/approvals", approvalsRoutes);
+  app.route("/api/onboarding", onboardingRoutes);
+  app.route("/api/chat", chatRoutes);
   app.route("/install", installRoutes);
 
   // 404 handler
