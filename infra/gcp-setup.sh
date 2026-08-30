@@ -1,266 +1,348 @@
 #!/bin/bash
-# ============================================================================
-# Xid-R GCP Production Setup
-# ============================================================================
-#
-# This script sets up the complete GCP infrastructure for Xid-R:
-# 1. GKE Autopilot cluster with GPU node pool
-# 2. Spot VM with GPU (for preemption testing)
-# 3. Cloud Run service (Self-Service Surface)
-# 4. Firestore database
-# 5. GCS bucket for checkpoints
-# 6. Service accounts and IAM
-#
-# Prerequisites:
-# - gcloud CLI installed and authenticated
-# - Billing account linked
-# - APIs enabled (run: gcloud services enable ...)
-#
-# Usage:
-#   ./infra/gcp-setup.sh [PROJECT_ID] [REGION]
-#
-# Example:
-#   ./infra/gcp-setup.sh xidr-hackathon us-central1
-#
-# ============================================================================
+# =============================================================================
+# Xid-R GCP Infrastructure Setup
+# =============================================================================
+# This script sets up the production GCP infrastructure for Xid-R demo
+# Estimated cost: $30-50 for demo recording session
+# =============================================================================
 
-set -e  # Exit on error
+set -e
 
 # Configuration
-PROJECT_ID="${1:-xidr-hackathon}"
-REGION="${2:-us-central1}"
-ZONE="${REGION}-a"
+PROJECT_ID="${GCP_PROJECT_ID:-xid-r-demo}"
+REGION="${GCP_REGION:-us-central1}"
+ZONE="${GCP_ZONE:-us-central1-a}"
+CLUSTER_NAME="xidr-cluster"
+GPU_POOL_NAME="gpu-pool"
+SERVICE_ACCOUNT_NAME="xidr-service-account"
 
-# Resource names
-GKE_CLUSTER="xidr-cluster"
-GKE_GPU_POOL="gpu-pool"
-SPOT_VM_NAME="xidr-spot-gpu"
-CLOUD_RUN_SERVICE="xidr-api"
-GCS_BUCKET="xidr-checkpoints-${PROJECT_ID}"
-FIRESTORE_DB="(default)"
-SERVICE_ACCOUNT="xidr-service"
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
 
-echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║             Xid-R GCP Infrastructure Setup                    ║"
-echo "╚═══════════════════════════════════════════════════════════════╝"
-echo ""
-echo "Project: ${PROJECT_ID}"
-echo "Region:  ${REGION}"
-echo "Zone:    ${ZONE}"
-echo ""
+log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-# Confirm
-read -p "Continue with setup? (y/N) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted."
-    exit 1
-fi
+# =============================================================================
+# Pre-flight Checks
+# =============================================================================
 
-# Set project
-echo ""
-echo "=== Setting project ==="
-gcloud config set project ${PROJECT_ID}
+preflight_checks() {
+    log_info "Running pre-flight checks..."
 
-# Enable APIs
-echo ""
-echo "=== Enabling APIs ==="
-gcloud services enable \
-    container.googleapis.com \
-    compute.googleapis.com \
-    run.googleapis.com \
-    firestore.googleapis.com \
-    storage.googleapis.com \
-    monitoring.googleapis.com \
-    logging.googleapis.com \
-    artifactregistry.googleapis.com \
-    cloudbuild.googleapis.com \
-    aiplatform.googleapis.com
+    if ! command -v gcloud &> /dev/null; then
+        log_error "gcloud CLI not found. Install: https://cloud.google.com/sdk/docs/install"
+        exit 1
+    fi
 
-# Create service account
-echo ""
-echo "=== Creating service account ==="
-gcloud iam service-accounts create ${SERVICE_ACCOUNT} \
-    --display-name="Xid-R Service Account" \
-    --description="Service account for Xid-R GPU broker" \
-    2>/dev/null || echo "Service account already exists"
+    if ! command -v kubectl &> /dev/null; then
+        log_error "kubectl not found. Install: gcloud components install kubectl"
+        exit 1
+    fi
 
-SA_EMAIL="${SERVICE_ACCOUNT}@${PROJECT_ID}.iam.gserviceaccount.com"
+    if ! gcloud auth list --filter=status:ACTIVE --format="value(account)" | head -n1 > /dev/null; then
+        log_error "Not authenticated. Run: gcloud auth login"
+        exit 1
+    fi
 
-# Grant IAM roles
-echo ""
-echo "=== Granting IAM roles ==="
-for role in \
-    roles/container.developer \
-    roles/compute.instanceAdmin.v1 \
-    roles/run.invoker \
-    roles/datastore.user \
-    roles/storage.objectAdmin \
-    roles/monitoring.viewer \
-    roles/logging.logWriter
-do
-    gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-        --member="serviceAccount:${SA_EMAIL}" \
-        --role="${role}" \
-        --quiet
-done
-
-# Create GCS bucket for checkpoints
-echo ""
-echo "=== Creating GCS bucket ==="
-gsutil mb -p ${PROJECT_ID} -l ${REGION} -c STANDARD gs://${GCS_BUCKET}/ 2>/dev/null || echo "Bucket already exists"
-gsutil lifecycle set <(cat <<EOF
-{
-  "rule": [
-    {
-      "action": {"type": "Delete"},
-      "condition": {"age": 7}
+    gcloud config set project "$PROJECT_ID" 2>/dev/null || {
+        log_error "Failed to set project. Does project '$PROJECT_ID' exist?"
+        exit 1
     }
-  ]
+
+    log_info "Pre-flight checks passed!"
 }
-EOF
-) gs://${GCS_BUCKET}/
 
-# Initialize Firestore
-echo ""
-echo "=== Initializing Firestore ==="
-gcloud firestore databases create \
-    --location=${REGION} \
-    --type=firestore-native \
-    2>/dev/null || echo "Firestore already initialized"
+# =============================================================================
+# Enable APIs
+# =============================================================================
 
-# Create GKE Autopilot cluster
-echo ""
-echo "=== Creating GKE Autopilot cluster ==="
-echo "This may take 5-10 minutes..."
-gcloud container clusters create-auto ${GKE_CLUSTER} \
-    --location=${REGION} \
-    --project=${PROJECT_ID} \
-    --enable-master-authorized-networks \
-    --master-authorized-networks="0.0.0.0/0" \
-    2>/dev/null || echo "Cluster already exists"
+enable_apis() {
+    log_info "Enabling required GCP APIs..."
 
-# Get cluster credentials
-echo ""
-echo "=== Getting cluster credentials ==="
-gcloud container clusters get-credentials ${GKE_CLUSTER} \
-    --location=${REGION} \
-    --project=${PROJECT_ID}
+    apis=(
+        "container.googleapis.com"
+        "compute.googleapis.com"
+        "run.googleapis.com"
+        "firestore.googleapis.com"
+        "monitoring.googleapis.com"
+        "cloudresourcemanager.googleapis.com"
+        "iam.googleapis.com"
+        "artifactregistry.googleapis.com"
+        "secretmanager.googleapis.com"
+    )
 
-# Note: GKE Autopilot doesn't require manual GPU node pool creation
-# GPUs are provisioned on-demand when pods request them
+    for api in "${apis[@]}"; do
+        log_info "  Enabling $api..."
+        gcloud services enable "$api" --quiet
+    done
 
+    log_info "All APIs enabled!"
+}
+
+# =============================================================================
+# Create Service Account
+# =============================================================================
+
+create_service_account() {
+    log_info "Creating service account..."
+
+    SA_EMAIL="${SERVICE_ACCOUNT_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+    if ! gcloud iam service-accounts describe "$SA_EMAIL" &>/dev/null; then
+        gcloud iam service-accounts create "$SERVICE_ACCOUNT_NAME" \
+            --display-name="Xid-R Service Account" \
+            --description="Service account for Xid-R GPU broker"
+    fi
+
+    roles=(
+        "roles/container.admin"
+        "roles/compute.admin"
+        "roles/run.admin"
+        "roles/datastore.user"
+        "roles/monitoring.viewer"
+        "roles/iam.serviceAccountUser"
+    )
+
+    for role in "${roles[@]}"; do
+        log_info "  Granting $role..."
+        gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member="serviceAccount:$SA_EMAIL" \
+            --role="$role" \
+            --quiet 2>/dev/null || true
+    done
+
+    KEY_FILE="./xidr-sa-key.json"
+    if [ ! -f "$KEY_FILE" ]; then
+        log_info "Creating service account key..."
+        gcloud iam service-accounts keys create "$KEY_FILE" \
+            --iam-account="$SA_EMAIL"
+        log_warn "Service account key saved to $KEY_FILE"
+    fi
+
+    log_info "Service account configured!"
+}
+
+# =============================================================================
+# Create GKE Cluster (Standard with GPU support)
+# =============================================================================
+
+create_gke_cluster() {
+    log_info "Creating GKE cluster..."
+
+    if gcloud container clusters describe "$CLUSTER_NAME" --zone="$ZONE" &>/dev/null; then
+        log_info "Cluster already exists, getting credentials..."
+        gcloud container clusters get-credentials "$CLUSTER_NAME" --zone="$ZONE"
+        return
+    fi
+
+    log_info "Creating GKE Standard cluster with GPU support (5-10 minutes)..."
+    
+    gcloud container clusters create "$CLUSTER_NAME" \
+        --zone="$ZONE" \
+        --num-nodes=1 \
+        --machine-type="e2-medium" \
+        --release-channel=rapid \
+        --enable-ip-alias \
+        --workload-pool="${PROJECT_ID}.svc.id.goog"
+
+    gcloud container clusters get-credentials "$CLUSTER_NAME" --zone="$ZONE"
+    log_info "GKE cluster created!"
+}
+
+# =============================================================================
+# Create GPU Node Pool
+# =============================================================================
+
+create_gpu_node_pool() {
+    log_info "Creating GPU node pool with T4 GPUs..."
+
+    if gcloud container node-pools describe "$GPU_POOL_NAME" \
+        --cluster="$CLUSTER_NAME" --zone="$ZONE" &>/dev/null; then
+        log_info "GPU node pool already exists, skipping"
+        return
+    fi
+
+    gcloud container node-pools create "$GPU_POOL_NAME" \
+        --cluster="$CLUSTER_NAME" \
+        --zone="$ZONE" \
+        --machine-type="n1-standard-4" \
+        --accelerator="type=nvidia-tesla-t4,count=1" \
+        --num-nodes=1 \
+        --min-nodes=0 \
+        --max-nodes=2 \
+        --enable-autoscaling \
+        --spot \
+        --node-taints="nvidia.com/gpu=present:NoSchedule"
+
+    # Install NVIDIA GPU drivers
+    kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/nvidia-driver-installer/cos/daemonset-preloaded.yaml
+
+    log_info "GPU node pool created!"
+}
+
+# =============================================================================
 # Create Spot VM with GPU
-echo ""
-echo "=== Creating Spot VM with GPU ==="
-echo "This is for preemption testing..."
+# =============================================================================
 
-# Check if VM exists
-if gcloud compute instances describe ${SPOT_VM_NAME} --zone=${ZONE} &>/dev/null; then
-    echo "Spot VM already exists"
-else
-    gcloud compute instances create ${SPOT_VM_NAME} \
-        --zone=${ZONE} \
-        --machine-type=n1-standard-4 \
-        --accelerator=type=nvidia-tesla-t4,count=1 \
+create_spot_vm() {
+    log_info "Creating Spot VM with T4 GPU..."
+
+    SPOT_VM_NAME="xidr-spot-gpu-1"
+
+    if gcloud compute instances describe "$SPOT_VM_NAME" --zone="$ZONE" &>/dev/null; then
+        log_info "Spot VM already exists"
+        return
+    fi
+
+    gcloud compute instances create "$SPOT_VM_NAME" \
+        --zone="$ZONE" \
+        --machine-type="n1-standard-4" \
+        --accelerator="type=nvidia-tesla-t4,count=1" \
         --maintenance-policy=TERMINATE \
         --provisioning-model=SPOT \
         --instance-termination-action=STOP \
-        --image-family=ubuntu-2204-lts \
-        --image-project=ubuntu-os-cloud \
-        --boot-disk-size=100GB \
-        --boot-disk-type=pd-ssd \
-        --metadata=startup-script='#!/bin/bash
-# Install NVIDIA drivers
-sudo apt-get update
-sudo apt-get install -y nvidia-driver-535
-# Install Docker
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER
-# Install nvidia-container-toolkit
-distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
-curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
-curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | sudo tee /etc/apt/sources.list.d/nvidia-docker.list
-sudo apt-get update
-sudo apt-get install -y nvidia-container-toolkit
-sudo systemctl restart docker
-' \
-        --service-account=${SA_EMAIL} \
-        --scopes=cloud-platform
-fi
+        --image-family="pytorch-latest-gpu" \
+        --image-project="deeplearning-platform-release" \
+        --boot-disk-size="100GB" \
+        --boot-disk-type="pd-ssd" \
+        --metadata="install-nvidia-driver=True" \
+        --scopes="cloud-platform"
 
-# Create Artifact Registry repository
-echo ""
-echo "=== Creating Artifact Registry ==="
-gcloud artifacts repositories create xidr \
-    --repository-format=docker \
-    --location=${REGION} \
-    --description="Xid-R container images" \
-    2>/dev/null || echo "Repository already exists"
+    log_info "Spot VM created: $SPOT_VM_NAME"
+}
 
-# Build and push container image
-echo ""
-echo "=== Building container image ==="
-CONTAINER_IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/xidr/api:latest"
+# =============================================================================
+# Setup Firestore
+# =============================================================================
 
-# Configure Docker for Artifact Registry
-gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+setup_firestore() {
+    log_info "Setting up Firestore..."
 
-# Build and push
-docker build -t ${CONTAINER_IMAGE} .
-docker push ${CONTAINER_IMAGE}
+    gcloud firestore databases create \
+        --location="$REGION" \
+        --type=firestore-native \
+        2>/dev/null || log_info "Firestore database already exists"
 
-# Deploy to Cloud Run
-echo ""
-echo "=== Deploying to Cloud Run ==="
-gcloud run deploy ${CLOUD_RUN_SERVICE} \
-    --image=${CONTAINER_IMAGE} \
-    --platform=managed \
-    --region=${REGION} \
-    --allow-unauthenticated \
-    --service-account=${SA_EMAIL} \
-    --set-env-vars="NODE_ENV=production,GCP_PROJECT=${PROJECT_ID},FIRESTORE_DATABASE=${FIRESTORE_DB},CHECKPOINT_BUCKET=${GCS_BUCKET}" \
-    --memory=1Gi \
-    --cpu=1 \
-    --min-instances=0 \
-    --max-instances=10 \
-    --port=8080
+    log_info "Firestore configured!"
+}
 
-# Get Cloud Run URL
-CLOUD_RUN_URL=$(gcloud run services describe ${CLOUD_RUN_SERVICE} \
-    --platform=managed \
-    --region=${REGION} \
-    --format='value(status.url)')
+# =============================================================================
+# Setup Budget Alert
+# =============================================================================
 
-# Print summary
-echo ""
-echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║                 Setup Complete!                                ║"
-echo "╚═══════════════════════════════════════════════════════════════╝"
-echo ""
-echo "Resources Created:"
-echo "  GKE Cluster:   ${GKE_CLUSTER} (${REGION})"
-echo "  Spot VM:       ${SPOT_VM_NAME} (${ZONE})"
-echo "  Cloud Run:     ${CLOUD_RUN_URL}"
-echo "  GCS Bucket:    gs://${GCS_BUCKET}/"
-echo "  Firestore:     ${FIRESTORE_DB}"
-echo "  Service Acct:  ${SA_EMAIL}"
-echo ""
-echo "Next Steps:"
-echo "  1. Set environment variables:"
-echo "     export XIDR_API_URL=${CLOUD_RUN_URL}"
-echo "     export GCP_PROJECT=${PROJECT_ID}"
-echo "     export CHECKPOINT_BUCKET=${GCS_BUCKET}"
-echo ""
-echo "  2. Register capacity units:"
-echo "     curl -X POST ${CLOUD_RUN_URL}/api/capacity/register \\"
-echo "       -H 'Content-Type: application/json' \\"
-echo "       -d '{\"type\":\"spot_vm\",\"project_id\":\"${PROJECT_ID}\",\"zone\":\"${ZONE}\",\"gpu_type\":\"nvidia-t4\",\"memory_gb\":16,\"instance_name\":\"${SPOT_VM_NAME}\"}'"
-echo ""
-echo "  3. Run integration tests:"
-echo "     XIDR_API_URL=${CLOUD_RUN_URL} npm run test:integration"
-echo ""
-echo "  4. Open dashboard:"
-echo "     npm run web"
-echo "     # Then visit http://localhost:3000"
-echo ""
+setup_budget_alert() {
+    log_info "Setting up budget alert at \$50..."
+
+    BILLING_ACCOUNT=$(gcloud billing projects describe "$PROJECT_ID" \
+        --format="value(billingAccountName)" 2>/dev/null | cut -d'/' -f2)
+
+    if [ -n "$BILLING_ACCOUNT" ]; then
+        gcloud billing budgets create \
+            --billing-account="$BILLING_ACCOUNT" \
+            --display-name="Xid-R Demo Budget" \
+            --budget-amount=50USD \
+            --threshold-rule=percent=0.5,basis=current-spend \
+            --threshold-rule=percent=0.9,basis=current-spend \
+            2>/dev/null || log_info "Budget may already exist"
+
+        log_info "Budget alert configured!"
+    else
+        log_warn "Could not configure budget alert"
+    fi
+}
+
+# =============================================================================
+# Scale GPU Nodes
+# =============================================================================
+
+scale_gpu_nodes() {
+    local count="${1:-1}"
+    log_info "Scaling GPU node pool to $count nodes..."
+
+    gcloud container clusters resize "$CLUSTER_NAME" \
+        --node-pool="$GPU_POOL_NAME" \
+        --zone="$ZONE" \
+        --num-nodes="$count" \
+        --quiet
+
+    log_info "GPU nodes scaled to $count"
+}
+
+# =============================================================================
+# Print Summary
+# =============================================================================
+
+print_summary() {
+    echo ""
+    echo "============================================================"
+    echo "  Xid-R GCP Infrastructure Setup Complete!"
+    echo "============================================================"
+    echo ""
+    echo "Resources Created:"
+    echo "  - GKE Cluster:  $CLUSTER_NAME"
+    echo "  - GPU Pool:     $GPU_POOL_NAME (T4, Spot)"
+    echo "  - Spot VM:      xidr-spot-gpu-1 (T4)"
+    echo "  - Firestore:    Native mode database"
+    echo ""
+    echo "Next Steps:"
+    echo "  1. Set: export GOOGLE_APPLICATION_CREDENTIALS=./xidr-sa-key.json"
+    echo "  2. Run: npm run dev"
+    echo "  3. Dashboard: http://localhost:3000"
+    echo ""
+    echo "Scale GPU nodes:"
+    echo "  ./infra/gcp-setup.sh scale 0  # Scale down to save cost"
+    echo "  ./infra/gcp-setup.sh scale 2  # Scale up for demo"
+    echo ""
+    echo "Cleanup when done:"
+    echo "  ./infra/gcp-setup.sh cleanup"
+    echo ""
+    echo "============================================================"
+}
+
+# =============================================================================
+# Cleanup
+# =============================================================================
+
+cleanup() {
+    log_warn "Cleaning up all resources..."
+
+    gcloud compute instances delete "xidr-spot-gpu-1" \
+        --zone="$ZONE" --quiet 2>/dev/null || true
+
+    gcloud container clusters delete "$CLUSTER_NAME" \
+        --zone="$ZONE" --quiet 2>/dev/null || true
+
+    log_info "Cleanup complete!"
+}
+
+# =============================================================================
+# Main
+# =============================================================================
+
+case "${1:-setup}" in
+    setup)
+        preflight_checks
+        enable_apis
+        create_service_account
+        create_gke_cluster
+        create_gpu_node_pool
+        create_spot_vm
+        setup_firestore
+        setup_budget_alert
+        print_summary
+        ;;
+    scale)
+        scale_gpu_nodes "${2:-1}"
+        ;;
+    cleanup)
+        cleanup
+        ;;
+    *)
+        echo "Usage: $0 {setup|scale [count]|cleanup}"
+        exit 1
+        ;;
+esac

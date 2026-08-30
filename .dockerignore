@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+.npm/
+
+# Build output
+dist/
+
+# Development files
+*.log
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Test files
+coverage/
+*.test.ts
+__tests__/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*
+.docker/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Scripts
+scripts/
+
+# Infrastructure
+infra/
+k8s/
+helm/
+
+# Web frontend
+web/
+
+# Tenant agents (not needed for control plane)
+src/tenant-agents/
+
+# Packages (SDK is separate)
+packages/
+
+# Misc
+.DS_Store
+*.tsbuildinfo

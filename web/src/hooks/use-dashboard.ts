@@ -151,13 +151,15 @@ export function useDashboard() {
       setLoading(true);
       setError(null);
 
-      const [dashboardRes, leasesRes, eventsRes] = await Promise.all([
+      const [dashboardRes, leasesRes] = await Promise.all([
         api.getDashboard().catch(() => null),
         api.getLeases().catch(() => ({ leases: [] })),
-        api.getRecentEvents(20).catch(() => ({ events: [] })),
       ]);
 
       if (dashboardRes) {
+        // Use recent_events from dashboard (has proper summaries)
+        const recentEvents = dashboardRes.recent_events || [];
+
         setState({
           stats: {
             activeLeases: dashboardRes.stats.active_leases,
@@ -179,12 +181,12 @@ export function useDashboard() {
             capacityLane: l.capacityLane,
             grantedAt: l.grantedAt,
           })),
-          events: eventsRes.events.map((e) => ({
-            id: e.id,
-            type: e.eventType || (e as unknown as { type: string }).type,
+          events: recentEvents.map((e, idx) => ({
+            id: `evt_${idx}`,
+            type: e.type,
             timestamp: e.timestamp,
-            summary: e.reasoning || (e.eventType || (e as unknown as { type: string }).type).replace(/_/g, ' '),
-            leaseId: e.leaseId || (e as unknown as { lease_id: string | null }).lease_id,
+            summary: e.summary,
+            leaseId: null,
           })),
           gpuUtilization: dashboardRes.gpuUtilization || [],
           tenantBreakdown: dashboardRes.tenantBreakdown || [],

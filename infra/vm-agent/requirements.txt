@@ -1,0 +1,2 @@
+# Xid-R VM Agent Dependencies
+# No external dependencies - uses only Python stdlib
