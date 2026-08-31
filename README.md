@@ -44,7 +44,7 @@ Enterprise GPU infrastructure has a hidden crisis:
 
 ## 💡 The Solution
 
-**Xid-R** creates a real-time marketplace where AI agents autonomously negotiate for GPU resources using **Agent-to-Agent (A2A) protocol**.
+**Xid-R** creates a real-time infrastructure where AI agents autonomously negotiate for GPU resources using **Agent-to-Agent (A2A) protocol**.
 
 When preemption happens, agents don't crash—they **checkpoint gracefully** and resume on new capacity.
 
@@ -67,6 +67,7 @@ When preemption happens, agents don't crash—they **checkpoint gracefully** and
 The AI revolution is creating unprecedented demand for GPU compute. But there's a paradox: while companies scramble to acquire GPUs, the ones they already have sit idle most of the time.
 
 **The Numbers Tell the Story:**
+
 - According to Cast AI's 2024 Kubernetes report, enterprise GPU utilization averages just **30%**
 - A single NVIDIA A100 costs **$10,000-15,000** or **$3-4/hour** on cloud
 - Large AI teams spend **$10M+/year** on GPU infrastructure
@@ -111,6 +112,7 @@ Xid-R acts as an **intelligent broker** between three parties:
 #### Step 1: Capacity Registration
 
 GPU owners (GKE nodes, Spot VMs, or Cloud Run workers) run a **VM Agent** that:
+
 - Reports available GPU capacity to the control plane
 - Monitors utilization in real-time
 - Detects preemption signals (Spot VM termination notices)
@@ -140,6 +142,7 @@ POST /mcp/tools/xidr_request_gpu
 ```
 
 The **Scheduler** matches the request to available capacity based on:
+
 - GPU type compatibility
 - Current utilization
 - Priority level
@@ -151,11 +154,11 @@ If capacity is available, a **lease** is created:
 
 ```json
 {
-    "lease_id": "lease_abc123",
-    "status": "granted",
-    "capacity_unit_id": "unit_spot_vm_xyz",
-    "preemption_warning_seconds": 120,
-    "checkpoint_target_uri": "gs://xidr-checkpoints/lease_abc123/"
+  "lease_id": "lease_abc123",
+  "status": "granted",
+  "capacity_unit_id": "unit_spot_vm_xyz",
+  "preemption_warning_seconds": 120,
+  "checkpoint_target_uri": "gs://xidr-checkpoints/lease_abc123/"
 }
 ```
 
@@ -203,6 +206,7 @@ When the GPU needs to be reclaimed (e.g., Spot VM preemption), **this is where X
 ```
 
 **The key innovation:** The agent makes the decision about how to handle preemption. It can:
+
 - **Checkpoint** - Save state and resume later (default)
 - **Migrate** - Move to different capacity (e.g., Cloud Run)
 - **Accept Loss** - Release immediately without saving
@@ -210,6 +214,7 @@ When the GPU needs to be reclaimed (e.g., Spot VM preemption), **this is where X
 #### Step 5: Resume on New Capacity
 
 When new capacity becomes available, Xid-R:
+
 1. Sends a `resume_notification` to the agent
 2. Agent downloads checkpoint from GCS
 3. Agent restores state and continues from where it left off
@@ -220,14 +225,15 @@ When new capacity becomes available, Xid-R:
 
 We use **A2A (Agent-to-Agent) protocol** for negotiation because:
 
-| Aspect | REST API | A2A Protocol |
-|--------|----------|--------------|
-| Direction | One-way (client → server) | Bidirectional (peer-to-peer) |
-| Decision Making | Server decides | Agent decides |
-| Autonomy | Low | High |
-| Negotiation | Not possible | Native support |
+| Aspect          | REST API                  | A2A Protocol                 |
+| --------------- | ------------------------- | ---------------------------- |
+| Direction       | One-way (client → server) | Bidirectional (peer-to-peer) |
+| Decision Making | Server decides            | Agent decides                |
+| Autonomy        | Low                       | High                         |
+| Negotiation     | Not possible              | Native support               |
 
 With A2A, the tenant agent is treated as a **peer**, not just a client. It can:
+
 - Negotiate grace periods
 - Counter-propose alternatives
 - Make autonomous decisions
@@ -260,15 +266,16 @@ We use **MCP (Model Context Protocol)** for GPU requests because:
 
 Unlike kernel-level checkpointing (CRIU, cuda-checkpoint), Xid-R uses **cooperative checkpointing**:
 
-| Approach | Kernel-Level | Cooperative (Xid-R) |
-|----------|--------------|---------------------|
-| Implementation | OS/kernel modifications | Application-level SDK |
-| State Captured | Full process memory | Application-defined state |
-| GPU Memory | Requires CUDA support | Not needed |
-| Complexity | High | Low |
-| Portability | OS-specific | Portable |
+| Approach       | Kernel-Level            | Cooperative (Xid-R)       |
+| -------------- | ----------------------- | ------------------------- |
+| Implementation | OS/kernel modifications | Application-level SDK     |
+| State Captured | Full process memory     | Application-defined state |
+| GPU Memory     | Requires CUDA support   | Not needed                |
+| Complexity     | High                    | Low                       |
+| Portability    | OS-specific             | Portable                  |
 
 **What gets checkpointed:**
+
 - Task queue (pending work)
 - Scratchpad (intermediate results)
 - Conversation history (for chat agents)
@@ -276,6 +283,7 @@ Unlike kernel-level checkpointing (CRIU, cuda-checkpoint), Xid-R uses **cooperat
 - Progress indicators
 
 **What doesn't get checkpointed:**
+
 - GPU VRAM contents (agent reloads on resume)
 - Network connections (re-established)
 - File handles (reopened)
@@ -287,6 +295,7 @@ This is simpler, more reliable, and works across all agent frameworks.
 Xid-R saves money through two mechanisms:
 
 **1. Harvesting Idle Capacity**
+
 ```
 Traditional: Pay for 24 hours, use 8 hours (30% utilization)
 Xid-R: Pay only for actual usage via harvested capacity
@@ -294,6 +303,7 @@ Savings: Up to 70%
 ```
 
 **2. Using Spot/Preemptible VMs Safely**
+
 ```
 On-demand A100: $3.00/hour
 Spot A100: $0.90/hour (70% cheaper)
@@ -302,6 +312,7 @@ Xid-R: Graceful checkpoint, no lost work
 ```
 
 **Pricing Model (Planned):**
+
 - 15% gain-share on recovered compute value
 - Example: Agent saves $1000/mo → Xid-R bills $150
 
@@ -309,22 +320,22 @@ Xid-R: Graceful checkpoint, no lost work
 
 Xid-R supports multiple **trust tiers**:
 
-| Tier | Isolation | Use Case |
-|------|-----------|----------|
-| **MPS** | GPU sharing (CUDA MPS) | Trusted internal agents |
-| **MIG** | GPU partitioning (Multi-Instance GPU) | Semi-trusted workloads |
-| **Dedicated** | Exclusive GPU access | External/untrusted agents |
+| Tier          | Isolation                             | Use Case                  |
+| ------------- | ------------------------------------- | ------------------------- |
+| **MPS**       | GPU sharing (CUDA MPS)                | Trusted internal agents   |
+| **MIG**       | GPU partitioning (Multi-Instance GPU) | Semi-trusted workloads    |
+| **Dedicated** | Exclusive GPU access                  | External/untrusted agents |
 
 Each tenant's checkpoint data is stored in isolated GCS paths with per-lease credentials.
 
 ### What Makes Xid-R Different
 
-| vs. | Xid-R Advantage |
-|-----|-----------------|
+| vs.              | Xid-R Advantage                                        |
+| ---------------- | ------------------------------------------------------ |
 | **Raw Spot VMs** | Orchestrated checkpoint/resume, not DIY crash handling |
-| **GKE Native** | Cross-cluster/cross-tenant broker layer |
-| **machine0** | Harvests idle capacity, not just standard VM pricing |
-| **Chamber** | Agent-native MCP/A2A, not ops Slack bot |
+| **GKE Native**   | Cross-cluster/cross-tenant broker layer                |
+| **machine0**     | Harvests idle capacity, not just standard VM pricing   |
+| **Chamber**      | Agent-native MCP/A2A, not ops Slack bot                |
 
 **The key differentiator:** Nobody else has built the **broker layer** that matches idle GPU capacity to agent demand with **A2A negotiation** for graceful preemption.
 
@@ -332,15 +343,16 @@ Each tenant's checkpoint data is stored in isolated GCS paths with per-lease cre
 
 In our demo environment:
 
-| Metric | Value |
-|--------|-------|
-| Capacity Units Registered | 13 |
-| Checkpoints Completed | 7+ |
-| Total Savings | $14.83 |
-| Crashed Jobs | 0 |
-| Grant Latency | < 1 second |
+| Metric                    | Value      |
+| ------------------------- | ---------- |
+| Capacity Units Registered | 13         |
+| Checkpoints Completed     | 7+         |
+| Total Savings             | $14.83     |
+| Crashed Jobs              | 0          |
+| Grant Latency             | < 1 second |
 
 At enterprise scale (1000 GPUs):
+
 - **Estimated savings:** $500K - $2M/year
 - **Recovered utilization:** 30% → 85%
 - **Developer productivity:** No more lost work from crashes
